@@ -1,0 +1,4 @@
+"Id","Designator","Footprint","Quantity","Comment","JLCPCB Part #"
+7,"U9,U10,U8","TSSOP-24",3,"SN74LVC4245APWR","C7859"
+9,"C4,C7,C3,C9,C10,C1,C6,C2,C8,C5","0402",10,"100nF","C1525"
+10,"U4,U2,U3,U1","SOIC-16",4,"SN74HC138DR","C6818"
