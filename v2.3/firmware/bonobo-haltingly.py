@@ -11,7 +11,7 @@ def InputPin(pinNum):
 
 Direction = OutputPin(16, 1)
 HaltBar = OutputPin(17, 1)
-Slenb = OutputPin(18, 0)
+Slenb = OutputPin(18, 1)
 SpoonBar = OutputPin(19, 1)
 Led = OutputPin("LED", 1)
 

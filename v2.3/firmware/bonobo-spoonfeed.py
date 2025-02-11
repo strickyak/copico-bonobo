@@ -74,7 +74,8 @@ def onreset_prog():
     SIDE_DRIVE_AND_HALT = SIDE_DO_DRIVE_D_BUS + SIDE_DO_HALT + SIDE_DO_FLOAT + SIDE_DO_SPOON
     SIDE_HALT = SIDE_DONT_DRIVE_D_BUS + SIDE_DO_HALT + SIDE_DONT_FLOAT + SIDE_DO_SPOON
 
-    wait(0, gpio, E_CLOCK_PIN) # synchronize on a full pulse of E.
+    label("top000")
+    wait(0, gpio, E_CLOCK_PIN) .side(SIDE_NORMAL) # synchronize on a full pulse of E.
     wait(1, gpio, E_CLOCK_PIN) # wait until E hi
     wait(0, gpio, E_CLOCK_PIN) # wait until E lo
 
@@ -101,10 +102,11 @@ def onreset_prog():
     wait(0, gpio, E_CLOCK_PIN) # wait until E lo
     out(pindirs, 8)             .side(SIDE_HALT) # direction=1=IN, Slenb=no, Halt=yes
 
-    # Get stuck here until the main routine re-inits this state machine.
-    label("loop_forever")
-    jmp("loop_forever")
-    
+    jmp("top000")
+    ## # Get stuck here until the main routine re-inits this state machine.
+    ## label("loop_forever")
+    ## jmp("loop_forever")
+
 @rp2.asm_pio(
     out_init=tuple(8 * [IN_HIGH]),   # 0-7: D0-D7
     sideset_init=(OUT_HIGH,
@@ -178,12 +180,12 @@ while True:
     Slenb.value(0)                  # halt while resetting
     HaltBar.value(0)                # halt while resetting
     SpoonBar.value(0)                  # halt while resetting
-    time.sleep(0.50)    # was 0.1                 # debounce
+    time.sleep(0.01)    # was 0.1                 # debounce
     print("debounced.  ")
 
     while ResetBar.value()==0: pass  # wait for ResetBar to release
     print("RESET gone.  ")
-    time.sleep(0.50)   # was 0.5              # debounce and wait to sync on Halt
+    time.sleep(0.01)   # was 0.5              # debounce and wait to sync on Halt
     print("SLEPT half a second.  ")
 
     pio0 = rp2.PIO(0)
@@ -202,7 +204,10 @@ while True:
 
     Led.value(1)
     sm1.active(True)
-    print("Activated onreset prog.  Deactivating.\n")
+    print("Activated onreset prog.\n")
+    while True:
+        pass
+    print("Deactivating.\n")
     sm1.active(False)
     pio0.remove_program(onreset_prog)
     Direction(1)
