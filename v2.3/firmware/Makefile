@@ -1,4 +1,4 @@
-all: life-semi.python bonobo-step52.py
+all: life-semi.decb life-semi.python bonobo-step52.py
 
 PRAGMATA = --pragma=undefextern --pragma=cescapes --pragma=importundefexport
 
@@ -13,6 +13,6 @@ life-semi.decb: life-semi.o entry.o
 life-semi.python: life-semi.decb decb_to_word_pairs
 	./decb_to_word_pairs < $< > $@
 
-bonobo-step52.py: bonobo-step51.py
+bonobo-step52.py: bonobo-step51.py life-semi.python
 	cat life-semi.python > $@
 	sed -n '/BONOBO/,$$ p' bonobo-step51.py >> $@

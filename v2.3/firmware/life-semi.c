@@ -41,18 +41,117 @@ void Qmemcpy(volatile byte* d, byte* s, word n) {
   while (n--) *d++ = *s++;
 }
 
+#if 0
+io PutIOByte ff90 <-- 6c
+io PutIOByte ff91 <-- 00
+io PutIOByte ff92 <-- 00
+io PutIOByte ff93 <-- 00
+io PutIOByte ff94 <-- 09
+io PutIOByte ff95 <-- 00
+io PutIOByte ff96 <-- 00
+io PutIOByte ff97 <-- 00
+io PutIOByte ff98 <-- 03
+io PutIOByte ff99 <-- 20
+io PutIOByte ff9a <-- 00
+io PutIOByte ff9b <-- 00
+io PutIOByte ff9c <-- 00
+io PutIOByte ff9d <-- 3c
+io PutIOByte ff9e <-- 01
+io PutIOByte ff9f <-- 00
+io PutIOByte ff90 <-- 80
+io PutIOByte ff90 <-- 0a
+io PutIOByte ff90 <-- ce
+io PutIOByte ff94 <-- ff
+io PutIOByte ff95 <-- ff
+io PutIOByte ff98 <-- 00
+io PutIOByte ff99 <-- 00
+io PutIOByte ff9a <-- 00
+io PutIOByte ff9b <-- 00
+;
+io PutIOByte ff9c <-- 0f
+;
+io PutIOByte ff9d <-- e0
+io PutIOByte ff9e <-- 00
+io PutIOByte ff9f <-- 00
+io PutIOByte ff90 <-- ca
+io PutIOByte ff90 <-- c8
+io PutIOByte ff90 <-- ca
+io PutIOByte ff90 <-- ce
+
+io PutIOByte ff90 <-- cc
+io PutIOByte ff98 <-- 00
+io PutIOByte ff99 <-- 00
+io PutIOByte ff9a <-- 00
+io PutIOByte ff9b <-- 00
+io PutIOByte ff9c <-- 0f
+io PutIOByte ff9d <-- e0
+io PutIOByte ff9e <-- 00
+io PutIOByte ff9f <-- 00
+
+io PutIOByte ff90 <-- cc
+io PutIOByte ff98 <-- 00
+io PutIOByte ff99 <-- 00
+io PutIOByte ff9a <-- 00
+io PutIOByte ff9b <-- 00
+io PutIOByte ff9c <-- 0f
+io PutIOByte ff9d <-- e0
+io PutIOByte ff9e <-- 00
+io PutIOByte ff9f <-- 00
+#endif
+
 #define Poke(ADDR,VALUE) ((*(volatile byte*)(ADDR)) = (VALUE));
 void InitCoco3() {
-    Poke(0xFF90, 0x80); // Coco 1/2 Compatible
+    // Now PIA1 controling the VDG.
+    Poke(0xFF21, 0);     // choose direction reg, A port.
+    Poke(0xFF20, 0xFE);  // set direction
+    Poke(0xFF23, 0);     // choose direction reg, B port.
+    Poke(0xFF22, 0xF8);  // set direction
+
+    Poke(0xFF21, 0x34);  // choose data reg, A port, and CA2 outputs 0.
+    Poke(0xFF23, 0x34);  // choose data reg, B port, and CB2 outputs 0.
+
+    Poke(0xFF20, 0x02);  // set data (the "2" bit is RS232 out.
+    Poke(0xFF22, 0x08);  // set data.  $08: css=1 for Orange.
+
+    ///////////
+    // Now init the SAM.
+    // Poke all the even addresses
+    for (word i = 0xFFC0; i< 0xFFE0; i+=2) {
+        Poke(i, 0);
+    }
+    // Odd exceptions:
+    //// Poke(0xFFDB, 0);  // Say we have 16K RAM
+    Poke(0xFFDD, 0);  // Say we have 32/64K RAM
+    //// -- DONT -- Poke(0xFFC7, 0);  // move up to $0200 for Text Display
+    ///////////
+
+    Poke(0xFF90, 0x80); // Coco 1/2 Compatible, no MMU, no GIME F/IRQs.
     for (word i = 0xFF91; i < 0xFFA0; i++) {
         Poke(i, 0x00); // Nothing special.
     }
+    // doesnt matter? // Poke(0xFF91, 0x40); // Memory type 256K
+    Poke(0xFF9D, 0xE0); // $FF9[DE] <- $E000
+
+    // AHA
+    Poke(0xff98 , 0x03 );
+    Poke(0xff99 , 0x20 );
+    // NOTE bit 3 of 0xff98 sets 50Hz, PAL mode.
+
+    // I don't understand this, but this fixed my semigraphics.
+    Poke(0xFF9C, 0x0F);  // "Vertical scrolling enable." "7 scan lines to scroll up."
+
 
     // Now init the SAM.
-    for (word i = 0xFFC0; i< 0xFFE0; i+=2) {
-        // Poke all the even addresses, except $FFDB (16K RAM).
-        Poke(i + (i==0xFFDA), 0);
-    }
+    // // Poke all the even addresses
+    // for (word i = 0xFFC0; i< 0xFFE0; i+=2) {
+        // Poke(i, 0);
+    // }
+    // Odd exceptions:
+    //// Poke(0xFFDB, 0);  // Say we have 16K RAM
+    // Poke(0xFFDD, 0);  // Say we have 32/64K RAM
+    //// -- DONT -- Poke(0xFFC7, 0);  // move up to $0200 for Text Display
+
+    ///////////////////
 
     // Now PIA1 controling the VDG.
     Poke(0xFF21, 0);     // choose direction reg, A port.
@@ -64,7 +163,7 @@ void InitCoco3() {
     Poke(0xFF23, 0x34);  // choose data reg, B port, and CB2 outputs 0.
 
     Poke(0xFF20, 0x02);  // set data (the "2" bit is RS232 out.
-    Poke(0xFF22, 0x00);  // set data
+    Poke(0xFF22, 0x08);  // set data.  $08: css=1 for Orange.
 
     // And PIA0.
     Poke(0xFF01, 0);     // choose direction reg, A port.
@@ -156,9 +255,20 @@ void AddPentomino(word x) {
 
 void main() {
     InitCoco3();
-    STOP();
-    Qmemset(S, '.', 512);
+    Qmemset(S, '%', 512);
     Qmemset(A, 0, N);
+
+    //-- for (word i=0; i < 512; i++) {
+        //-- byte b = (i&1) ^ ((i>>5)&1);
+        //-- Poke(S+i, 63 & (b ? '/' : '\\'));
+    //-- }
+    // Qmemset(512, '?', 256);
+
+    for (word i = 0; i < 16; i++) {
+        Poke(i+i, 0x80 + i);
+    }
+
+    // STOP();
 
     show(A);
 
