@@ -427,7 +427,7 @@ PairsOfWords = [
     ( 0x00ffccff, 0x00a903fd ), ## LDD #$ff00 ; STD $03a9
     ( 0x0039ccff, 0x00aa03fd ), ## LDD #$3900 ; STD $03aa
     ( 0x00c6ccff, 0x00ab03fd ), ## LDD #$c600 ; STD $03ab
-    ( 0x00fcccff, 0x00ac03fd ), ## LDD #$fc00 ; STD $03ac
+    ( 0x00deccff, 0x00ac03fd ), ## LDD #$de00 ; STD $03ac
     ( 0x00f7ccff, 0x00ad03fd ), ## LDD #$f700 ; STD $03ad
     ( 0x00ffccff, 0x00ae03fd ), ## LDD #$ff00 ; STD $03ae
     ( 0x0068ccff, 0x00af03fd ), ## LDD #$6800 ; STD $03af
@@ -588,7 +588,7 @@ PairsOfWords = [
     ( 0x0000ccff, 0x004a04fd ), ## LDD #$0000 ; STD $044a
     ( 0x005dccff, 0x004b04fd ), ## LDD #$5d00 ; STD $044b
     ( 0x0027ccff, 0x004c04fd ), ## LDD #$2700 ; STD $044c
-    ( 0x0031ccff, 0x004d04fd ), ## LDD #$3100 ; STD $044d
+    ( 0x002cccff, 0x004d04fd ), ## LDD #$2c00 ; STD $044d
     ( 0x00e6ccff, 0x004e04fd ), ## LDD #$e600 ; STD $044e
     ( 0x004eccff, 0x004f04fd ), ## LDD #$4e00 ; STD $044f
     ( 0x00cbccff, 0x005004fd ), ## LDD #$cb00 ; STD $0450
@@ -621,42 +621,42 @@ PairsOfWords = [
     ( 0x0026ccff, 0x006b04fd ), ## LDD #$2600 ; STD $046b
     ( 0x00ffccff, 0x006c04fd ), ## LDD #$ff00 ; STD $046c
     ( 0x0065ccff, 0x006d04fd ), ## LDD #$6500 ; STD $046d
-    ( 0x00c6ccff, 0x006e04fd ), ## LDD #$c600 ; STD $046e
-    ( 0x00fbccff, 0x006f04fd ), ## LDD #$fb00 ; STD $046f
-    ( 0x00f7ccff, 0x007004fd ), ## LDD #$f700 ; STD $0470
-    ( 0x00ffccff, 0x007104fd ), ## LDD #$ff00 ; STD $0471
-    ( 0x0068ccff, 0x007204fd ), ## LDD #$6800 ; STD $0472
-    ( 0x00aeccff, 0x007304fd ), ## LDD #$ae00 ; STD $0473
-    ( 0x00c4ccff, 0x007404fd ), ## LDD #$c400 ; STD $0474
-    ( 0x008cccff, 0x007504fd ), ## LDD #$8c00 ; STD $0475
-    ( 0x0000ccff, 0x007604fd ), ## LDD #$0000 ; STD $0476
-    ( 0x0040ccff, 0x007704fd ), ## LDD #$4000 ; STD $0477
-    ( 0x0027ccff, 0x007804fd ), ## LDD #$2700 ; STD $0478
-    ( 0x0018ccff, 0x007904fd ), ## LDD #$1800 ; STD $0479
-    ( 0x00afccff, 0x007a04fd ), ## LDD #$af00 ; STD $047a
-    ( 0x0044ccff, 0x007b04fd ), ## LDD #$4400 ; STD $047b
-    ( 0x007eccff, 0x007c04fd ), ## LDD #$7e00 ; STD $047c
+    ( 0x00aeccff, 0x006e04fd ), ## LDD #$ae00 ; STD $046e
+    ( 0x00c4ccff, 0x006f04fd ), ## LDD #$c400 ; STD $046f
+    ( 0x008cccff, 0x007004fd ), ## LDD #$8c00 ; STD $0470
+    ( 0x0000ccff, 0x007104fd ), ## LDD #$0000 ; STD $0471
+    ( 0x0040ccff, 0x007204fd ), ## LDD #$4000 ; STD $0472
+    ( 0x0027ccff, 0x007304fd ), ## LDD #$2700 ; STD $0473
+    ( 0x0018ccff, 0x007404fd ), ## LDD #$1800 ; STD $0474
+    ( 0x00afccff, 0x007504fd ), ## LDD #$af00 ; STD $0475
+    ( 0x0044ccff, 0x007604fd ), ## LDD #$4400 ; STD $0476
+    ( 0x007eccff, 0x007704fd ), ## LDD #$7e00 ; STD $0477
+    ( 0x0003ccff, 0x007804fd ), ## LDD #$0300 ; STD $0478
+    ( 0x00c0ccff, 0x007904fd ), ## LDD #$c000 ; STD $0479
+    ( 0x00e6ccff, 0x007a04fd ), ## LDD #$e600 ; STD $047a
+    ( 0x004eccff, 0x007b04fd ), ## LDD #$4e00 ; STD $047b
+    ( 0x00c8ccff, 0x007c04fd ), ## LDD #$c800 ; STD $047c
     ( 0x0003ccff, 0x007d04fd ), ## LDD #$0300 ; STD $047d
-    ( 0x00c0ccff, 0x007e04fd ), ## LDD #$c000 ; STD $047e
-    ( 0x00e6ccff, 0x007f04fd ), ## LDD #$e600 ; STD $047f
-    ( 0x004eccff, 0x008004fd ), ## LDD #$4e00 ; STD $0480
-    ( 0x00c8ccff, 0x008104fd ), ## LDD #$c800 ; STD $0481
-    ( 0x0003ccff, 0x008204fd ), ## LDD #$0300 ; STD $0482
-    ( 0x004fccff, 0x008304fd ), ## LDD #$4f00 ; STD $0483
-    ( 0x00c3ccff, 0x008404fd ), ## LDD #$c300 ; STD $0484
-    ( 0x00ffccff, 0x008504fd ), ## LDD #$ff00 ; STD $0485
-    ( 0x00ffccff, 0x008604fd ), ## LDD #$ff00 ; STD $0486
-    ( 0x001fccff, 0x008704fd ), ## LDD #$1f00 ; STD $0487
-    ( 0x0089ccff, 0x008804fd ), ## LDD #$8900 ; STD $0488
-    ( 0x004fccff, 0x008904fd ), ## LDD #$4f00 ; STD $0489
-    ( 0x0059ccff, 0x008a04fd ), ## LDD #$5900 ; STD $048a
-    ( 0x0059ccff, 0x008b04fd ), ## LDD #$5900 ; STD $048b
-    ( 0x00c4ccff, 0x008c04fd ), ## LDD #$c400 ; STD $048c
-    ( 0x0001ccff, 0x008d04fd ), ## LDD #$0100 ; STD $048d
-    ( 0x00e7ccff, 0x008e04fd ), ## LDD #$e700 ; STD $048e
-    ( 0x0084ccff, 0x008f04fd ), ## LDD #$8400 ; STD $048f
-    ( 0x0020ccff, 0x009004fd ), ## LDD #$2000 ; STD $0490
-    ( 0x00d2ccff, 0x009104fd ), ## LDD #$d200 ; STD $0491
+    ( 0x004fccff, 0x007e04fd ), ## LDD #$4f00 ; STD $047e
+    ( 0x00c3ccff, 0x007f04fd ), ## LDD #$c300 ; STD $047f
+    ( 0x00ffccff, 0x008004fd ), ## LDD #$ff00 ; STD $0480
+    ( 0x00ffccff, 0x008104fd ), ## LDD #$ff00 ; STD $0481
+    ( 0x001fccff, 0x008204fd ), ## LDD #$1f00 ; STD $0482
+    ( 0x0089ccff, 0x008304fd ), ## LDD #$8900 ; STD $0483
+    ( 0x004fccff, 0x008404fd ), ## LDD #$4f00 ; STD $0484
+    ( 0x0059ccff, 0x008504fd ), ## LDD #$5900 ; STD $0485
+    ( 0x0059ccff, 0x008604fd ), ## LDD #$5900 ; STD $0486
+    ( 0x00c4ccff, 0x008704fd ), ## LDD #$c400 ; STD $0487
+    ( 0x0001ccff, 0x008804fd ), ## LDD #$0100 ; STD $0488
+    ( 0x00e7ccff, 0x008904fd ), ## LDD #$e700 ; STD $0489
+    ( 0x0084ccff, 0x008a04fd ), ## LDD #$8400 ; STD $048a
+    ( 0x0020ccff, 0x008b04fd ), ## LDD #$2000 ; STD $048b
+    ( 0x00d7ccff, 0x008c04fd ), ## LDD #$d700 ; STD $048c
+    ( 0x00c6ccff, 0x008d04fd ), ## LDD #$c600 ; STD $048d
+    ( 0x006fccff, 0x008e04fd ), ## LDD #$6f00 ; STD $048e
+    ( 0x00f7ccff, 0x008f04fd ), ## LDD #$f700 ; STD $048f
+    ( 0x00ffccff, 0x009004fd ), ## LDD #$ff00 ; STD $0490
+    ( 0x0068ccff, 0x009104fd ), ## LDD #$6800 ; STD $0491
     ( 0x0032ccff, 0x009204fd ), ## LDD #$3200 ; STD $0492
     ( 0x006fccff, 0x009304fd ), ## LDD #$6f00 ; STD $0493
     ( 0x0035ccff, 0x009404fd ), ## LDD #$3500 ; STD $0494
@@ -841,7 +841,7 @@ PairsOfWords = [
     ( 0x0042ccff, 0x004705fd ), ## LDD #$4200 ; STD $0547
     ( 0x00f7ccff, 0x004805fd ), ## LDD #$f700 ; STD $0548
     ( 0x00ffccff, 0x004905fd ), ## LDD #$ff00 ; STD $0549
-    ( 0x0068ccff, 0x004a05fd ), ## LDD #$6800 ; STD $054a
+    ( 0x006accff, 0x004a05fd ), ## LDD #$6a00 ; STD $054a
     ( 0x006cccff, 0x004b05fd ), ## LDD #$6c00 ; STD $054b
     ( 0x0042ccff, 0x004c05fd ), ## LDD #$4200 ; STD $054c
     ( 0x00e6ccff, 0x004d05fd ), ## LDD #$e600 ; STD $054d
@@ -994,42 +994,79 @@ def ldd_immediate_std_extended_prog():
     label("loop_forever")
     jmp("loop_forever")
 
+pio1 = rp2.PIO(1)
+######################################################
 @rp2.asm_pio(
-    # in_init=tuple(8 * [IN]),   # GPIO 8-15: D0-D7
-    in_shiftdir=PIO.SHIFT_LEFT, # 8 bits at a time
     autopush=True,
     push_thresh=8,
     )
 def control_writes():
+    GPIO_CW = 22
     wrap_target()
-    wait(0, pin, 22)
-    wait(1, pin, 22)  # Control Write singals Pin 22
+    wait(0, gpio, GPIO_CW)
+    wait(1, gpio, GPIO_CW)  # Control Write singals GPIO 22
     in_(pins, 8)
     wrap()
 
+@rp2.asm_pio(
+    autopush=True,
+    push_thresh=8,
+    )
+def data_writes():
+    GPIO_DW = 27
+    wrap_target()
+    wait(0, gpio, GPIO_DW)
+    wait(1, gpio, GPIO_DW)  # Control Write singals GPIO 27
+    in_(pins, 8)
+    wrap()
+
+#@rp2.asm_pio()
+#def control_reads():
+#    wrap_target()
+#    wait(0, gpio, 27)
+#    wait(1, gpio, 27)  # Control Write singals GPIO__
+#    in_(pins, 8)
+#    #push()
+#    wrap()
+
+def CheckCW():
+    if not CW: return
+    if not CW.active(): return
+    if not CW.rx_fifo(): return
+    x = CW.get()
+    print("[", x, "]", end=' ')
+
+def CheckDW():
+    if not DW: return
+    if not DW.active(): return
+    if not DW.rx_fifo(): return
+    x = DW.get()
+    print(x, "/", end=' ')
+
+pio1.add_program(control_writes)
+CW = pio1.state_machine(
+    0,  # which SM
+    control_writes,
+    in_base=8,
+)
+CW.active(True)
+
+pio1.add_program(data_writes)
+DW = pio1.state_machine(
+    1,  # which SM
+    data_writes,
+    in_base=8,
+)
+DW.active(True)
+
+# print("CheckInputs Only")
+while False:
+    CheckCW()
+    CheckDW()
+
+######################################################
 
 pio0 = rp2.PIO(0)
-#pio0.add_program(onreset_prog)
-#pio0.add_program(ldd_immediate_std_extended_prog)
-
-#/def CheckInputs(sm):
-#/    if not sm: return
-#/    if not sm.active(): return
-#/    if not sm.rx_fifo(): return
-#/    x = sm.get()
-#/    print(" [%d] ", x)
-
-sm1, sm2 = None, None
-
-#/pio0.add_program(control_writes)
-#/sm3 = pio0.state_machine(
-    #/3,  # which SM
-    #/control_writes,
-    #/freq=125_000_000,
-    #/in_base=8,
-#/)
-#/sm3.active(True)
-
 while True:
     print("Step2: waiting for RESET.  ")
 
@@ -1037,16 +1074,21 @@ while True:
     while True:
         # LED 3 seconds off, do not watch reset.
         Led.value(0)
-        for tick in range(60):
-            sleep(0.05)
+        for tick in range(300):
+            sleep(0.01)
+            CheckCW()
+            CheckDW()
 
         # LED 3 seconds on, watch reset, break to spoonfeed.
         Led.value(1)
-        for tick in range(60):
+        for tick in range(300):
+            #CheckInputs(sm3)
             if ResetN.value()==0:
                 reset = True
                 break
-            sleep(0.05)
+            sleep(0.01)
+            CheckCW()
+            CheckDW()
 
         if reset: break
 

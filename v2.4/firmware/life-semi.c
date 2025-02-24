@@ -8,6 +8,7 @@
 
 typedef unsigned char byte;
 typedef unsigned int word;
+#define Poke(ADDR,VALUE) ((*(volatile byte*)(ADDR)) = (VALUE));
 
 #define N 1024
 #define W 64
@@ -41,7 +42,6 @@ void Qmemcpy(volatile byte* d, byte* s, word n) {
   while (n--) *d++ = *s++;
 }
 
-#define Poke(ADDR,VALUE) ((*(volatile byte*)(ADDR)) = (VALUE));
 void InitCoco3() {
     // Now PIA1 controling the VDG.
     Poke(0xFF21, 0);     // choose direction reg, A port.
@@ -114,7 +114,7 @@ void render() {
       S[(y * (W / 4)) + (x >> 1)] = z;
     }
   }
-  Poke(0xFF68, 252);
+  Poke(0xFF68, 222);
 }
 
 void generation() {
@@ -132,8 +132,8 @@ void generation() {
         BB(x + 1, y + 1) = (count == 3);
       }
     }
-    Poke(0xFF68, 251);
   }
+  Poke(0xFF68, 111);
 }
 
 void AddPentomino(word x) {
@@ -179,7 +179,7 @@ void main() {
           render();
           Qmemcpy(A, B, N);
           
-          Poke(0xFF68, g);
+          Poke(0xFF6A, g);
         }
       }
     }
