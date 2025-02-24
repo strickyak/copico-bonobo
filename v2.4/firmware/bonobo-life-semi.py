@@ -1032,19 +1032,35 @@ sm1, sm2 = None, None
 
 while True:
     print("Step2: waiting for RESET.  ")
-    while ResetN.value()==1:
-        #/CheckInputs(sm3)
-        pass  # wait for drop
+
+    reset = False
+    while True:
+        # LED 3 seconds off, do not watch reset.
+        Led.value(0)
+        for tick in range(60):
+            sleep(0.05)
+
+        # LED 3 seconds on, watch reset, break to spoonfeed.
+        Led.value(1)
+        for tick in range(60):
+            if ResetN.value()==0:
+                reset = True
+                break
+            sleep(0.05)
+
+        if reset: break
+
+    Led.value(1)
     print("got RESET.  ")
-    Led.value(0)
     Halt.value(0)                  # halt while resetting
     Spoon.value(0)                 # spoon allows halt to get through
     sleep(0.1)                     # debounce
     print("debounced.  ")
     while ResetN.value()==0: pass  # wait for ResetN to release
     print("RESET gone.  ")
-    sleep(0.5)                     # debounce and wait to sync on Halt
-    print("SLEPT half a second.  ")
+    Led.value(0)
+    sleep(0.1)                     # debounce and wait to sync on Halt
+    print("SLEPT decisecond.  ")
 
     pio0.add_program(onreset_prog)
 
@@ -1055,10 +1071,10 @@ while True:
         sideset_base=16,
         out_base=8,
     )
-    # FF=outputs A027=reset_vector 00=inputs
-    sm1.put(0x0027a0ff)
 
-    Led.value(1)
+    # FF=outputs $0888=reset_vector 00=inputs
+    sm1.put(0x008808ff)
+
     Trigger.value(0)
     Trigger.value(1)
     sm1.active(True)
@@ -1069,12 +1085,14 @@ while True:
 
     i = 0
     for (w1, w2) in PairsOfWords:
+      Led.value(1)
       sm2 = pio0.state_machine(2) # which state machine in pio
       sm2.init(ldd_immediate_std_extended_prog,
         freq=125_000_000,
         sideset_base=16,
         out_base=8,
       )
+      Led.value(0)
       sm2.put(w1)  # ff=outputs CC=LDD_immediate $58='X' $59='Y'
       sm2.put(w2)  # FD=STD_extended 00=inputs
       sm2.active(True)

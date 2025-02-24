@@ -1,0 +1,11 @@
+*,v
+RCS/
+.*.swp
+.*~
+*.o
+*.list
+*.map
+*.s
+*.decb
+*.elf
+*.tmp
