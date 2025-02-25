@@ -174,12 +174,19 @@ void main() {
           Qmemcpy(B, A, N);
           render();
         }
-        for (word g = 0; g < 100; g++) {
+        for (word g = 250; g < 260; g++) {
           generation();
           render();
           Qmemcpy(A, B, N);
           
-          Poke(0xFF6A, g);
+          // Nothing puts a status on the TX_FIFO yet.
+          word w = *(volatile word*)0xFF68;  // Status Read
+          byte hi = (byte)(w>>8);
+          byte lo = (byte)w;
+
+          Poke(0xFF6A, g);   // Display on console.
+          Poke(0xFF6A, hi);
+          Poke(0xFF6A, lo);
         }
       }
     }

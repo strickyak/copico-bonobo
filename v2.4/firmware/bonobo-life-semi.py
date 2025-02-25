@@ -743,7 +743,7 @@ PairsOfWords = [
     ( 0x0034ccff, 0x00e504fd ), ## LDD #$3400 ; STD $04e5
     ( 0x0060ccff, 0x00e604fd ), ## LDD #$6000 ; STD $04e6
     ( 0x0032ccff, 0x00e704fd ), ## LDD #$3200 ; STD $04e7
-    ( 0x007dccff, 0x00e804fd ), ## LDD #$7d00 ; STD $04e8
+    ( 0x007bccff, 0x00e804fd ), ## LDD #$7b00 ; STD $04e8
     ( 0x0033ccff, 0x00e904fd ), ## LDD #$3300 ; STD $04e9
     ( 0x00e4ccff, 0x00ea04fd ), ## LDD #$e400 ; STD $04ea
     ( 0x00ccccff, 0x00eb04fd ), ## LDD #$cc00 ; STD $04eb
@@ -813,58 +813,83 @@ PairsOfWords = [
     ( 0x00bdccff, 0x002b05fd ), ## LDD #$bd00 ; STD $052b
     ( 0x0002ccff, 0x002c05fd ), ## LDD #$0200 ; STD $052c
     ( 0x00d9ccff, 0x002d05fd ), ## LDD #$d900 ; STD $052d
-    ( 0x006fccff, 0x002e05fd ), ## LDD #$6f00 ; STD $052e
-    ( 0x0042ccff, 0x002f05fd ), ## LDD #$4200 ; STD $052f
-    ( 0x00bdccff, 0x003005fd ), ## LDD #$bd00 ; STD $0530
-    ( 0x0003ccff, 0x003105fd ), ## LDD #$0300 ; STD $0531
-    ( 0x00b5ccff, 0x003205fd ), ## LDD #$b500 ; STD $0532
-    ( 0x00bdccff, 0x003305fd ), ## LDD #$bd00 ; STD $0533
-    ( 0x0002ccff, 0x003405fd ), ## LDD #$0200 ; STD $0534
-    ( 0x00d9ccff, 0x003505fd ), ## LDD #$d900 ; STD $0535
-    ( 0x008eccff, 0x003605fd ), ## LDD #$8e00 ; STD $0536
-    ( 0x000cccff, 0x003705fd ), ## LDD #$0c00 ; STD $0537
-    ( 0x0000ccff, 0x003805fd ), ## LDD #$0000 ; STD $0538
-    ( 0x0031ccff, 0x003905fd ), ## LDD #$3100 ; STD $0539
-    ( 0x0089ccff, 0x003a05fd ), ## LDD #$8900 ; STD $053a
-    ( 0x00fcccff, 0x003b05fd ), ## LDD #$fc00 ; STD $053b
-    ( 0x0000ccff, 0x003c05fd ), ## LDD #$0000 ; STD $053c
-    ( 0x00e6ccff, 0x003d05fd ), ## LDD #$e600 ; STD $053d
-    ( 0x0080ccff, 0x003e05fd ), ## LDD #$8000 ; STD $053e
-    ( 0x00e7ccff, 0x003f05fd ), ## LDD #$e700 ; STD $053f
-    ( 0x00a4ccff, 0x004005fd ), ## LDD #$a400 ; STD $0540
-    ( 0x008cccff, 0x004105fd ), ## LDD #$8c00 ; STD $0541
-    ( 0x0010ccff, 0x004205fd ), ## LDD #$1000 ; STD $0542
-    ( 0x0000ccff, 0x004305fd ), ## LDD #$0000 ; STD $0543
-    ( 0x0026ccff, 0x004405fd ), ## LDD #$2600 ; STD $0544
-    ( 0x00f3ccff, 0x004505fd ), ## LDD #$f300 ; STD $0545
-    ( 0x00e6ccff, 0x004605fd ), ## LDD #$e600 ; STD $0546
-    ( 0x0042ccff, 0x004705fd ), ## LDD #$4200 ; STD $0547
-    ( 0x00f7ccff, 0x004805fd ), ## LDD #$f700 ; STD $0548
+    ( 0x00c6ccff, 0x002e05fd ), ## LDD #$c600 ; STD $052e
+    ( 0x00faccff, 0x002f05fd ), ## LDD #$fa00 ; STD $052f
+    ( 0x00e7ccff, 0x003005fd ), ## LDD #$e700 ; STD $0530
+    ( 0x0044ccff, 0x003105fd ), ## LDD #$4400 ; STD $0531
+    ( 0x00bdccff, 0x003205fd ), ## LDD #$bd00 ; STD $0532
+    ( 0x0003ccff, 0x003305fd ), ## LDD #$0300 ; STD $0533
+    ( 0x00b5ccff, 0x003405fd ), ## LDD #$b500 ; STD $0534
+    ( 0x00bdccff, 0x003505fd ), ## LDD #$bd00 ; STD $0535
+    ( 0x0002ccff, 0x003605fd ), ## LDD #$0200 ; STD $0536
+    ( 0x00d9ccff, 0x003705fd ), ## LDD #$d900 ; STD $0537
+    ( 0x008eccff, 0x003805fd ), ## LDD #$8e00 ; STD $0538
+    ( 0x000cccff, 0x003905fd ), ## LDD #$0c00 ; STD $0539
+    ( 0x0000ccff, 0x003a05fd ), ## LDD #$0000 ; STD $053a
+    ( 0x0031ccff, 0x003b05fd ), ## LDD #$3100 ; STD $053b
+    ( 0x0089ccff, 0x003c05fd ), ## LDD #$8900 ; STD $053c
+    ( 0x00fcccff, 0x003d05fd ), ## LDD #$fc00 ; STD $053d
+    ( 0x0000ccff, 0x003e05fd ), ## LDD #$0000 ; STD $053e
+    ( 0x00e6ccff, 0x003f05fd ), ## LDD #$e600 ; STD $053f
+    ( 0x0080ccff, 0x004005fd ), ## LDD #$8000 ; STD $0540
+    ( 0x00e7ccff, 0x004105fd ), ## LDD #$e700 ; STD $0541
+    ( 0x00a4ccff, 0x004205fd ), ## LDD #$a400 ; STD $0542
+    ( 0x008cccff, 0x004305fd ), ## LDD #$8c00 ; STD $0543
+    ( 0x0010ccff, 0x004405fd ), ## LDD #$1000 ; STD $0544
+    ( 0x0000ccff, 0x004505fd ), ## LDD #$0000 ; STD $0545
+    ( 0x0026ccff, 0x004605fd ), ## LDD #$2600 ; STD $0546
+    ( 0x00f3ccff, 0x004705fd ), ## LDD #$f300 ; STD $0547
+    ( 0x00beccff, 0x004805fd ), ## LDD #$be00 ; STD $0548
     ( 0x00ffccff, 0x004905fd ), ## LDD #$ff00 ; STD $0549
-    ( 0x006accff, 0x004a05fd ), ## LDD #$6a00 ; STD $054a
-    ( 0x006cccff, 0x004b05fd ), ## LDD #$6c00 ; STD $054b
-    ( 0x0042ccff, 0x004c05fd ), ## LDD #$4200 ; STD $054c
-    ( 0x00e6ccff, 0x004d05fd ), ## LDD #$e600 ; STD $054d
-    ( 0x0042ccff, 0x004e05fd ), ## LDD #$4200 ; STD $054e
-    ( 0x00c1ccff, 0x004f05fd ), ## LDD #$c100 ; STD $054f
-    ( 0x0064ccff, 0x005005fd ), ## LDD #$6400 ; STD $0550
-    ( 0x0026ccff, 0x005105fd ), ## LDD #$2600 ; STD $0551
-    ( 0x00ddccff, 0x005205fd ), ## LDD #$dd00 ; STD $0552
-    ( 0x00ecccff, 0x005305fd ), ## LDD #$ec00 ; STD $0553
-    ( 0x00c4ccff, 0x005405fd ), ## LDD #$c400 ; STD $0554
-    ( 0x00c3ccff, 0x005505fd ), ## LDD #$c300 ; STD $0555
-    ( 0x0000ccff, 0x005605fd ), ## LDD #$0000 ; STD $0556
-    ( 0x0007ccff, 0x005705fd ), ## LDD #$0700 ; STD $0557
-    ( 0x00edccff, 0x005805fd ), ## LDD #$ed00 ; STD $0558
-    ( 0x00c4ccff, 0x005905fd ), ## LDD #$c400 ; STD $0559
-    ( 0x0010ccff, 0x005a05fd ), ## LDD #$1000 ; STD $055a
-    ( 0x0083ccff, 0x005b05fd ), ## LDD #$8300 ; STD $055b
-    ( 0x0000ccff, 0x005c05fd ), ## LDD #$0000 ; STD $055c
-    ( 0x003fccff, 0x005d05fd ), ## LDD #$3f00 ; STD $055d
-    ( 0x0022ccff, 0x005e05fd ), ## LDD #$2200 ; STD $055e
-    ( 0x00afccff, 0x005f05fd ), ## LDD #$af00 ; STD $055f
-    ( 0x0020ccff, 0x006005fd ), ## LDD #$2000 ; STD $0560
-    ( 0x00b2ccff, 0x006105fd ), ## LDD #$b200 ; STD $0561
+    ( 0x0068ccff, 0x004a05fd ), ## LDD #$6800 ; STD $054a
+    ( 0x001fccff, 0x004b05fd ), ## LDD #$1f00 ; STD $054b
+    ( 0x0010ccff, 0x004c05fd ), ## LDD #$1000 ; STD $054c
+    ( 0x001fccff, 0x004d05fd ), ## LDD #$1f00 ; STD $054d
+    ( 0x0089ccff, 0x004e05fd ), ## LDD #$8900 ; STD $054e
+    ( 0x004fccff, 0x004f05fd ), ## LDD #$4f00 ; STD $054f
+    ( 0x00edccff, 0x005005fd ), ## LDD #$ed00 ; STD $0550
+    ( 0x0042ccff, 0x005105fd ), ## LDD #$4200 ; STD $0551
+    ( 0x00e6ccff, 0x005205fd ), ## LDD #$e600 ; STD $0552
+    ( 0x0044ccff, 0x005305fd ), ## LDD #$4400 ; STD $0553
+    ( 0x00f7ccff, 0x005405fd ), ## LDD #$f700 ; STD $0554
+    ( 0x00ffccff, 0x005505fd ), ## LDD #$ff00 ; STD $0555
+    ( 0x006accff, 0x005605fd ), ## LDD #$6a00 ; STD $0556
+    ( 0x00ecccff, 0x005705fd ), ## LDD #$ec00 ; STD $0557
+    ( 0x0042ccff, 0x005805fd ), ## LDD #$4200 ; STD $0558
+    ( 0x00f7ccff, 0x005905fd ), ## LDD #$f700 ; STD $0559
+    ( 0x00ffccff, 0x005a05fd ), ## LDD #$ff00 ; STD $055a
+    ( 0x006accff, 0x005b05fd ), ## LDD #$6a00 ; STD $055b
+    ( 0x001fccff, 0x005c05fd ), ## LDD #$1f00 ; STD $055c
+    ( 0x0010ccff, 0x005d05fd ), ## LDD #$1000 ; STD $055d
+    ( 0x00f7ccff, 0x005e05fd ), ## LDD #$f700 ; STD $055e
+    ( 0x00ffccff, 0x005f05fd ), ## LDD #$ff00 ; STD $055f
+    ( 0x006accff, 0x006005fd ), ## LDD #$6a00 ; STD $0560
+    ( 0x006cccff, 0x006105fd ), ## LDD #$6c00 ; STD $0561
+    ( 0x0044ccff, 0x006205fd ), ## LDD #$4400 ; STD $0562
+    ( 0x00e6ccff, 0x006305fd ), ## LDD #$e600 ; STD $0563
+    ( 0x0044ccff, 0x006405fd ), ## LDD #$4400 ; STD $0564
+    ( 0x00c1ccff, 0x006505fd ), ## LDD #$c100 ; STD $0565
+    ( 0x0004ccff, 0x006605fd ), ## LDD #$0400 ; STD $0566
+    ( 0x0026ccff, 0x006705fd ), ## LDD #$2600 ; STD $0567
+    ( 0x00c9ccff, 0x006805fd ), ## LDD #$c900 ; STD $0568
+    ( 0x00ecccff, 0x006905fd ), ## LDD #$ec00 ; STD $0569
+    ( 0x00c4ccff, 0x006a05fd ), ## LDD #$c400 ; STD $056a
+    ( 0x00c3ccff, 0x006b05fd ), ## LDD #$c300 ; STD $056b
+    ( 0x0000ccff, 0x006c05fd ), ## LDD #$0000 ; STD $056c
+    ( 0x0007ccff, 0x006d05fd ), ## LDD #$0700 ; STD $056d
+    ( 0x00edccff, 0x006e05fd ), ## LDD #$ed00 ; STD $056e
+    ( 0x00c4ccff, 0x006f05fd ), ## LDD #$c400 ; STD $056f
+    ( 0x0010ccff, 0x007005fd ), ## LDD #$1000 ; STD $0570
+    ( 0x0083ccff, 0x007105fd ), ## LDD #$8300 ; STD $0571
+    ( 0x0000ccff, 0x007205fd ), ## LDD #$0000 ; STD $0572
+    ( 0x003fccff, 0x007305fd ), ## LDD #$3f00 ; STD $0573
+    ( 0x0010ccff, 0x007405fd ), ## LDD #$1000 ; STD $0574
+    ( 0x0022ccff, 0x007505fd ), ## LDD #$2200 ; STD $0575
+    ( 0x00ffccff, 0x007605fd ), ## LDD #$ff00 ; STD $0576
+    ( 0x0097ccff, 0x007705fd ), ## LDD #$9700 ; STD $0577
+    ( 0x007eccff, 0x007805fd ), ## LDD #$7e00 ; STD $0578
+    ( 0x0005ccff, 0x007905fd ), ## LDD #$0500 ; STD $0579
+    ( 0x0014ccff, 0x007a05fd ), ## LDD #$1400 ; STD $057a
     ( 0x0000ccff, 0x0004027e ), ## JMP $0204
 ]
 # THIS MAGIC LINE MUST SAY "BONOBO"
@@ -1000,69 +1025,94 @@ pio1 = rp2.PIO(1)
     autopush=True,
     push_thresh=8,
     )
-def control_writes():
-    GPIO_CW = 22
+def write_control():
+    GPIO_WC = 22
     wrap_target()
-    wait(0, gpio, GPIO_CW)
-    wait(1, gpio, GPIO_CW)  # Control Write singals GPIO 22
+    wait(0, gpio, GPIO_WC)
+    wait(1, gpio, GPIO_WC)  # Control Write singals GPIO 22
     in_(pins, 8)
     wrap()
+pio1.add_program(write_control)
+WC = pio1.state_machine(
+    0,  # which SM
+    write_control,
+    in_base=8,
+)
+WC.active(True)
+
 
 @rp2.asm_pio(
     autopush=True,
     push_thresh=8,
     )
-def data_writes():
+def write_data():
     GPIO_DW = 27
     wrap_target()
     wait(0, gpio, GPIO_DW)
     wait(1, gpio, GPIO_DW)  # Control Write singals GPIO 27
     in_(pins, 8)
     wrap()
+pio1.add_program(write_data)
+DW = pio1.state_machine(
+    1,  # which SM
+    write_data,
+    in_base=8,
+)
+DW.active(True)
 
-#@rp2.asm_pio()
-#def control_reads():
-#    wrap_target()
-#    wait(0, gpio, 27)
-#    wait(1, gpio, 27)  # Control Write singals GPIO__
-#    in_(pins, 8)
-#    #push()
-#    wrap()
 
-def CheckCW():
-    if not CW: return
-    if not CW.active(): return
-    if not CW.rx_fifo(): return
-    x = CW.get()
+@rp2.asm_pio(
+    out_init=tuple(8 * [IN]),   # GPIO 8-15: D0-D7
+    sideset_init=(HI,),
+    out_shiftdir=PIO.SHIFT_RIGHT, # 8 bits at a time
+)
+def read_status():
+    GPIO_RC = 26      # "control read" is "status read"
+    GPIO_E = 21       # The E clock
+    wrap_target()
+    wait(0, gpio, GPIO_RC) # Wait for Status Read strobe.
+    pull(noblock)          # Ready or not, pull data or zeros.
+    out(pindirs, 8)        .side(0) # set Data Bus as outputs (if nonzero pulled)
+    out(pins, 8)           # output hi byte
+    wait(0, gpio, GPIO_E)  # wait for E to drop...
+    wait(1, gpio, GPIO_E)  #    .. and come back up.
+    out(pins, 8)           # output lo byte
+    wait(0, gpio, GPIO_E)  # wait for E to drop...
+    nop()  [4]             #    .. and delay a bit
+    out(pindirs, 8)        .side(1) # set Data Bus as inputs
+    wrap()
+pio1.add_program(read_status)
+RC = pio1.state_machine(
+    2,  # which SM
+    read_status,
+    out_base=8,
+    sideset_base=16,
+)
+RC.active(True)
+RC.put(0x003412ff)
+RC.put(0x007856ff)
+RC.put(0x00bc9aff)
+RC.put(0x009988ff)
+
+def CheckWC():
+    if not WC: return
+    if not WC.active(): return
+    if not WC.rx_fifo(): return
+    x = WC.get()
     print("[", x, "]", end=' ')
 
-def CheckDW():
+def CheckWD():
     if not DW: return
     if not DW.active(): return
     if not DW.rx_fifo(): return
     x = DW.get()
     print(x, "/", end=' ')
-
-pio1.add_program(control_writes)
-CW = pio1.state_machine(
-    0,  # which SM
-    control_writes,
-    in_base=8,
-)
-CW.active(True)
-
-pio1.add_program(data_writes)
-DW = pio1.state_machine(
-    1,  # which SM
-    data_writes,
-    in_base=8,
-)
-DW.active(True)
+    # RC.put(0x0055AAff)
 
 # print("CheckInputs Only")
 while False:
-    CheckCW()
-    CheckDW()
+    CheckWC()
+    CheckWD()
 
 ######################################################
 
@@ -1076,8 +1126,8 @@ while True:
         Led.value(0)
         for tick in range(300):
             sleep(0.01)
-            CheckCW()
-            CheckDW()
+            CheckWC()
+            CheckWD()
 
         # LED 3 seconds on, watch reset, break to spoonfeed.
         Led.value(1)
@@ -1087,8 +1137,8 @@ while True:
                 reset = True
                 break
             sleep(0.01)
-            CheckCW()
-            CheckDW()
+            CheckWC()
+            CheckWD()
 
         if reset: break
 
