@@ -2555,8 +2555,8 @@ while True:
     while ResetN.value()==0: pass  # wait for ResetN to release
     print("RESET gone.  ")
     Led.value(0)
-    sleep(0.1)                     # debounce and wait to sync on Halt
-    print("SLEPT decisecond.  ")
+    sleep(1)                     # debounce and wait to sync on Halt
+    print("SLEPT a second.  ")
 
     pio0.add_program(onreset_prog)
 
@@ -2580,7 +2580,8 @@ while True:
     pio0.add_program(ldd_immediate_std_extended_prog)
 
     i = 0
-    for (w1, w2) in PairsOfWords:
+    _byte = 47 # Ascii Slash
+    for _addr in range(512):
       Led.value(1)
       sm2 = pio0.state_machine(2) # which state machine in pio
       sm2.init(ldd_immediate_std_extended_prog,
@@ -2589,11 +2590,15 @@ while True:
         out_base=8,
       )
       Led.value(0)
+
+      w1 = ((_byte&0xFF) << 24) | 0xCCFF  # LDD immediate
+      w2 = ((_addr&0xFF) << 16) | (_addr & 0xFF00) | 0xF7  # STB extended
+
       sm2.put(w1)  # ff=outputs CC=LDD_immediate $58='X' $59='Y'
       sm2.put(w2)  # FD=STD_extended 00=inputs
       sm2.active(True)
       # print("%d: (%08x, %08x)." % (i, w1, w2))
-      print("@", end='')
+      print("%", end='')
       sm2.active(False)
       i+=1
     print("")
@@ -2617,6 +2622,25 @@ while True:
       sm2.active(True)
       # print("%d: (%08x, %08x)." % (i, w1, w2))
       print("%", end='')
+      sm2.active(False)
+      i+=1
+    print("")
+
+    i = 0
+    for (w1, w2) in PairsOfWords:
+      Led.value(1)
+      sm2 = pio0.state_machine(2) # which state machine in pio
+      sm2.init(ldd_immediate_std_extended_prog,
+        freq=125_000_000,
+        sideset_base=16,
+        out_base=8,
+      )
+      Led.value(0)
+      sm2.put(w1)  # ff=outputs CC=LDD_immediate $58='X' $59='Y'
+      sm2.put(w2)  # FD=STD_extended 00=inputs
+      sm2.active(True)
+      # print("%d: (%08x, %08x)." % (i, w1, w2))
+      print("@", end='')
       sm2.active(False)
       i+=1
     print("")
