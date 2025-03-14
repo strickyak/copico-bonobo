@@ -91,12 +91,12 @@ func run() {
 	}
 	wire = Value(serial.Open(options))
 	defer wire.Close()
-	Log("Serial wire opened %q", *WIRE)
+	Logf("Serial wire opened %q", *WIRE)
 
 	// Open network connection to MCP
 	mcp = Value(net.Dial("tcp", *MCP))
 	defer mcp.Close()
-	Log("TCP mcp opened %q", *MCP)
+	Logf("TCP mcp opened %q", *MCP)
 
 	go loopToWire()
 	go loopToMcp()
@@ -138,7 +138,7 @@ const (
 
 func doFromWire(a packet) {
 	if a.c == LOG_PACKET {
-		Log("fromWire: %q", a.v)
+		Logf("fromWire: %q", a.v)
 		return
 	}
 
@@ -147,7 +147,7 @@ func doFromWire(a packet) {
 
 func doFromMcp(a packet) {
 	if a.c == LOG_PACKET {
-		Log("fromMcp: %q", a.v)
+		Logf("fromMcp: %q", a.v)
 		return
 	}
 
@@ -199,5 +199,5 @@ func Check(err error, args ...any) {
 	}
 }
 
-var Log = log.Printf
+var Logf = log.Printf
 var Panicf = log.Panicf
