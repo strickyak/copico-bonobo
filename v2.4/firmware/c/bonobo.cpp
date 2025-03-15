@@ -28,6 +28,7 @@ typedef unsigned int word;
 #include "control.pio.h"
 #include "status.pio.h"
 #include "read.pio.h"
+#include "write.pio.h"
 
 byte hi(word w) {
     return (byte)(w>>8);
@@ -96,9 +97,13 @@ void StartPio1() {
   const uint offset2 = pio_add_program(pio1, &read_pio_program);
   read_pio_init(pio1, sm2, offset2);
   pio_sm_clear_fifos(pio1, sm2);
+
+  const uint offset3 = pio_add_program(pio1, &write_pio_program);
+  read_pio_init(pio1, sm3, offset3);
+  pio_sm_clear_fifos(pio1, sm3);
 }
 
-// The first read is lost, from rom_buffer[0].
+// READ PIO DMA: The first read is lost, from rom_buffer[0].
 // The next 256 reads are read by 256 read cycles, rom[0-255].
 // Then one final read cycle clears the pipe, counts as 257,
 // but does not cause "direction" to change,
@@ -142,10 +147,10 @@ int main() {
     constexpr uint sm0 = 0, sm1 = 1, sm2 = 2, sm3 = 3;
     uint c = WAIT_GET(pio1, sm0);
 
-    if (c == 4) {
+    if (c == 4) {  // Read 256.
         // enable DMA
-        channel_config_set_read_increment(&cfg_read_data,true);
-        channel_config_set_write_increment(&cfg_read_data,false);
+        channel_config_set_read_increment(&cfg_read_data, true);
+        channel_config_set_write_increment(&cfg_read_data, false);
         channel_config_set_dreq(&cfg_read_data,
                                 pio_get_dreq(pio1, sm2, /*is_tx*/true));
 
@@ -162,7 +167,27 @@ int main() {
             true                      // Start immediately.      
         );
     }
-    PUT(pio1, sm1, (c==4) ? 1 : 13);
+    if (c == 9) {  // Write 256.
+        // enable DMA
+        channel_config_set_read_increment(&cfg_read_data, false);
+        channel_config_set_write_increment(&cfg_read_data, true);
+        channel_config_set_dreq(&cfg_read_data,
+                                pio_get_dreq(pio1, sm3, /*is_tx*/false));
+
+        channel_config_set_transfer_data_size(&cfg_read_data, DMA_SIZE_8);
+        channel_config_set_irq_quiet(&cfg_read_data, true);
+
+        channel_config_set_enable(&cfg_read_data, true);
+        dma_channel_configure(
+            chan_read_data,           // Channel to be configured
+            &cfg_read_data,           // The configuration we just created
+            rom,                      // The initial write address
+            &pio1->rxf[sm2],          // The initial read address
+            256,                      // Number of transfers
+            true                      // Start immediately.      
+        );
+    }
+    PUT(pio1, sm1, (c==4 || c==9) ? 1 : 13);
 
     printf(" (%d) ", c);
 

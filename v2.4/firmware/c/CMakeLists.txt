@@ -10,6 +10,7 @@ add_executable(${PROJECT} bonobo.cpp)
 pico_generate_pio_header(${PROJECT}  ${CMAKE_CURRENT_LIST_DIR}/control.pio)
 pico_generate_pio_header(${PROJECT}  ${CMAKE_CURRENT_LIST_DIR}/status.pio)
 pico_generate_pio_header(${PROJECT}  ${CMAKE_CURRENT_LIST_DIR}/read.pio)
+pico_generate_pio_header(${PROJECT}  ${CMAKE_CURRENT_LIST_DIR}/write.pio)
 
 target_sources(${PROJECT} PRIVATE bonobo.cpp)
 target_link_libraries(${PROJECT} PRIVATE pico_stdlib hardware_pio hardware_dma)

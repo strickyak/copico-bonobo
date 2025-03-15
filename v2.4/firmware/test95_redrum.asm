@@ -4,6 +4,30 @@
     ORG $0000
     LDU #$ff6A
 loop:
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+    LDA #9      ; 9 is Write DMA request
+    STA -1,U    ; command!
+Wwait:
+    LDB -1,U    ; get status
+    BEQ Wwait    ;   until non-zero
+
+    LDY #128    ; count 128
+    LDD #$0001
+Wmore:
+    STD ,U      ; write data to dual port
+    INCA
+    INCA
+    INCB
+    INCB
+    LEAY -1,y   ; y gets y - 1
+    BNE Wmore
+
+    LDB ,U      ; one extra read to clear the pipe! XXX
+
+    BRA loop
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     LDA #4      ; 4 is Read DMA request
     STA -1,U    ; command!
 
