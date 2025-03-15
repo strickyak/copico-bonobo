@@ -1,0 +1,63 @@
+; read.pio -- for the Copico Bonobo 2.4
+;
+; SPDX-License-Identifier: MIT
+
+; READ_CONTROL = 28
+
+.program read_pio
+.side_set 1 opt
+
+.wrap_target
+    mov osr, null    side 1  ; become inputs
+    out pindirs, 8         
+
+    wait 0 gpio 28           ; wait for READ strobe -----------------------
+
+    mov osr, ~ null          ; become outputs
+    out pindirs, 8         
+
+    pull                     ; wait for DMA.  Should be a very short time!?
+    out pins, 8      side 0
+
+    wait 1 gpio 28           ; wait for strobe to finish -------
+    nop           [5]
+
+.wrap
+
+% c-sdk {
+
+void read_pio_init(PIO pio, uint sm, uint offset) {
+   //
+   //  pico-examples/pio/hub75/hub75.pio shows order of inits.
+   //
+   constexpr uint DIRECTION_IN = false;
+   constexpr uint DIRECTION_OUT = true;
+   pio_sm_set_consecutive_pindirs(pio, sm, /*base*/8, /*count*/8, DIRECTION_IN);
+   pio_sm_set_consecutive_pindirs(pio, sm, /*base*/16, /*count*/1, DIRECTION_OUT);
+   pio_sm_set_consecutive_pindirs(pio, sm, /*base*/20, /*count*/3, DIRECTION_IN);
+   pio_sm_set_consecutive_pindirs(pio, sm, /*base*/26, /*count*/3, DIRECTION_IN);
+
+   // Because PIO writes to GPIO 8-15 and sideset writes to 16.
+   for (uint i = 8; i < 17; i++) {
+       pio_gpio_init(pio, i);
+   }
+
+   pio_sm_config cf = read_pio_program_get_default_config(offset);
+   sm_config_set_out_pins(&cf, /*base*/8, /*count*/8);
+   sm_config_set_clkdiv(&cf, 1);  // CLOCK DIVISOR
+
+   sm_config_set_sideset_pin_base(&cf, 16);  // Pin 16 == Direction.
+
+   // OUT: Shift to right, don't autopull.
+   const bool OUT_SHIFT_RIGHT = true;
+   const bool AUTOPULL = false;
+   const uint PULL_THRESHOLD = 8; // unused.
+   sm_config_set_out_shift(&cf, OUT_SHIFT_RIGHT, AUTOPULL, PULL_THRESHOLD);
+
+   pio_sm_init(pio, sm, offset, &cf);
+   pio_sm_exec(pio, sm, offset);
+   pio_sm_set_enabled(pio, sm, true);
+}
+
+
+%}

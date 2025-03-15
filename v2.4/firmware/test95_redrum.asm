@@ -17,6 +17,8 @@ more:
     LEAY -1,y   ; y gets y - 1
     BNE more
 
+    LDB ,U      ; one extra read to clear the pipe! XXX
+
     BRA loop
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

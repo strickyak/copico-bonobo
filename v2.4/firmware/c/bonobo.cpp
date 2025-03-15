@@ -98,7 +98,14 @@ void StartPio1() {
   pio_sm_clear_fifos(pio1, sm2);
 }
 
-byte rom[1024];
+// The first read is lost, from rom_buffer[0].
+// The next 256 reads are read by 256 read cycles, rom[0-255].
+// Then one final read cycle clears the pipe, counts as 257,
+// but does not cause "direction" to change,
+// so what is going on in the state machine!?
+
+byte rom_buffer[1025];                // XXX
+#define rom (rom_buffer+1)            // XXX
 
 int main() {
   OutPin(16, 1); // direction
@@ -150,8 +157,8 @@ int main() {
             chan_read_data,            // Channel to be configured
             &cfg_read_data,            // The configuration we just created
             &pio1->txf[sm2],          // The initial write address
-            rom,                      // The initial read address
-            256,                      // Number of transfers.
+            rom_buffer,    // XXX     // The initial read address (with 1 waste at front)
+            257,           // XXX     // Number of transfers, counting 1 waste at back!?
             true                      // Start immediately.      
         );
     }
