@@ -6,7 +6,7 @@
 
 .program status_pio
 .side_set 1 opt
-    set x, 21                ; Used if status is not ready yet; try agian.
+    set x, 0                 ; Used if status is not ready yet; try agian.
 
 .wrap_target
     mov osr, null    side 1  ; become inputs
@@ -27,9 +27,6 @@
 
 % c-sdk {
 
-#undef DIRECTION_IN
-#undef DIRECTION_OUT
-
 void status_pio_init(PIO pio, uint sm, uint offset) {
    //
    //  pico-examples/pio/hub75/hub75.pio shows order of inits.
@@ -41,7 +38,7 @@ void status_pio_init(PIO pio, uint sm, uint offset) {
    pio_sm_set_consecutive_pindirs(pio, sm, /*base*/20, /*count*/3, DIRECTION_IN);
    pio_sm_set_consecutive_pindirs(pio, sm, /*base*/26, /*count*/3, DIRECTION_IN);
 
-   // Because PIO writes to GPIO 8-16 and sideset writes to 17.
+   // Because PIO writes to GPIO 8-15 and sideset writes to 16.
    for (uint i = 8; i < 17; i++) {
        pio_gpio_init(pio, i);
    }
@@ -50,16 +47,12 @@ void status_pio_init(PIO pio, uint sm, uint offset) {
    sm_config_set_out_pins(&cf, /*base*/8, /*count*/8);
    sm_config_set_clkdiv(&cf, 1);  // CLOCK DIVISOR
 
-   // const uint STEAL_SIDESET_BITS = 2;
-   // const bool TOP_SIDESET_BIT_IS_APPLY_FLAG = true;
-   // const bool SIDESET_IS_FOR_PINDIRS = false;
-   // sm_config_set_sideset(&cf, STEAL_SIDESET_BITS, TOP_SIDESET_BIT_IS_APPLY_FLAG, SIDESET_IS_FOR_PINDIRS);
    sm_config_set_sideset_pin_base(&cf, 16);  // Pin 16 == Direction.
 
-   // OUT: Shift to right, don't autopull, threshold 29
+   // OUT: Shift to right, don't autopull.
    const bool OUT_SHIFT_RIGHT = true;
    const bool AUTOPULL = false;
-   const uint PULL_THRESHOLD = 8;
+   const uint PULL_THRESHOLD = 8; // unused.
    sm_config_set_out_shift(&cf, OUT_SHIFT_RIGHT, AUTOPULL, PULL_THRESHOLD);
 
    pio_sm_init(pio, sm, offset, &cf);

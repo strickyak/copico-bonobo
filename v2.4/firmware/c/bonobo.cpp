@@ -5,6 +5,7 @@
 // HINT: $ minicom -b 115200 -D /dev/ttyACM0
 
 #include <hardware/clocks.h>
+#include <hardware/dma.h>
 #include <hardware/pio.h>
 #include <hardware/structs/systick.h>
 #include <hardware/timer.h>
@@ -26,6 +27,7 @@ typedef unsigned int word;
 
 #include "control.pio.h"
 #include "status.pio.h"
+#include "read.pio.h"
 
 byte hi(word w) {
     return (byte)(w>>8);
@@ -78,7 +80,7 @@ void InitialBlinks() {
 }
 
 void StartPio1() {
-  constexpr uint sm0 = 0, sm1 = 1;
+  constexpr uint sm0 = 0, sm1 = 1, sm2 = 2, sm3 = 3;
 
   pio_clear_instruction_memory(pio1);
 
@@ -90,17 +92,24 @@ void StartPio1() {
   const uint offset1 = pio_add_program(pio1, &status_pio_program);
   status_pio_init(pio1, sm1, offset1);
   pio_sm_clear_fifos(pio1, sm1);
-  // pio_sm_restart(pio1, sm1);
+
+  const uint offset2 = pio_add_program(pio1, &read_pio_program);
+  read_pio_init(pio1, sm2, offset2);
+  pio_sm_clear_fifos(pio1, sm2);
 }
 
+byte rom[1024];
+
 int main() {
-  for (uint i = 0; i < 16; i++) InPin(i);
-  OutPin(6, 1); // cart
-  OutPin(7, 1); // nmi
   OutPin(16, 1); // direction
   OutPin(17, 1); // halt
   OutPin(18, 1); // slenb
   OutPin(19, 1); // spoon
+
+  for (uint i = 0; i < 16; i++) InPin(i);
+  OutPin(6, 1); // cart
+  OutPin(7, 1); // nmi
+
   InPin(20); // reset
   InPin(21); // E clock
   InPin(22); // Write Control
@@ -111,15 +120,42 @@ int main() {
 
   stdio_usb_init();
   printf("*** HELLO BONOBO\n");
+  for (uint i =0; i < 1024; i++) rom[i] = (byte)(i ^ 8);
 
   InitialBlinks();
+
   StartPio1();
+
+  int chan_read_data = dma_claim_unused_channel(/*required*/true);
+  dma_channel_config cfg_read_data = dma_channel_get_default_config(chan_read_data);
+
   int lit = 0;
   int count = 0;
   while (true) {
-    constexpr uint sm0 = 0, sm1 = 1;
+    constexpr uint sm0 = 0, sm1 = 1, sm2 = 2, sm3 = 3;
     uint c = WAIT_GET(pio1, sm0);
-    PUT(pio1, sm1, c);
+
+    if (c == 4) {
+        // enable DMA
+        channel_config_set_read_increment(&cfg_read_data,true);
+        channel_config_set_write_increment(&cfg_read_data,false);
+        channel_config_set_dreq(&cfg_read_data,
+                                pio_get_dreq(pio1, sm2, /*is_tx*/true));
+
+        channel_config_set_transfer_data_size(&cfg_read_data, DMA_SIZE_8);
+        channel_config_set_irq_quiet(&cfg_read_data, true);
+
+        channel_config_set_enable(&cfg_read_data, true);
+        dma_channel_configure(
+            chan_read_data,            // Channel to be configured
+            &cfg_read_data,            // The configuration we just created
+            &pio1->txf[sm2],          // The initial write address
+            rom,                      // The initial read address
+            256,                      // Number of transfers.
+            true                      // Start immediately.      
+        );
+    }
+    PUT(pio1, sm1, (c==4) ? 1 : 13);
 
     printf(" (%d) ", c);
 
