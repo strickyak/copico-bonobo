@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"log"
 	"net"
 	"runtime/debug"
@@ -14,71 +15,87 @@ import (
 
 var WIRE = flag.String("wire", "/dev/ttyACM0", "serial device connected by USB to Pi Pico")
 var BAUD = flag.Uint("baud", 115200, "serial device baud rate")
-var FIRMWARE = flag.String("loadm", "nekot-bonobo", "binary to load on startup")
-var MCP = flag.String("mcp", "localhost:14511", "global MCP server or local test MCP server")
+var FIRMWARE = flag.String("firmware", "nekot-bonobo", "binary to load on startup")
+var MCP = flag.String("mcp", "localhost:2321", "global LEMMA server or MCP server or local test MCP server")
 var HANDLE = flag.String("handle", "ZZZ", "three-letter handle for this user")
 
-var fromWire chan packet
-var toWire chan packet
 var wire io.ReadWriteCloser
-
-var fromMcp chan packet
-var toMcp chan packet
 var mcp io.ReadWriteCloser
+var channel chan byte
 
-type word uint16
-
-type packet struct {
-	c byte
-	p word
-	v []byte
-}
-
-func loopFromWire() {
+func loopFromMcpToWire() {
+    const N = 4096
+	var bb [N]byte
 	for {
-		var bb [5]byte
-		read(wire, bb[:])
-		c := bb[0]
-		n := hilo(bb[1], bb[2])
-		p := hilo(bb[3], bb[4])
-		v := make([]byte, n)
-		read(wire, v)
-		fromWire <- packet{c, p, v}
+        count := Value(mcp.Read(bb[:]))
+        Value(wire.Write(bb[:count]))
 	}
 }
 
-func loopToWire() {
-	for {
-		a := <-toWire
-		n := word(len(a.v))
-		q := [5]byte{a.c, hi(n), lo(n), hi(a.p), lo(a.p)}
-		write(wire, q[:])
-		write(wire, a.v)
-	}
+func loopFromWireToChannel() {
+    defer func() {
+        r := recover()
+        if r != nil {
+            Logf("loopFromWireToChannel: Closing channel because %v", r)
+            close(channel)
+        }
+    }()
+
+    const N = 128
+	var bb [N]byte
+    for {
+        count := Value(wire.Read(bb[:]))
+        for i := 0; i < count; i++ {
+            channel <- bb[i]
+        }
+    }
 }
 
-func loopFromMcp() {
-	for {
-		var bb [5]byte
-		read(wire, bb[:])
-		c := bb[0]
-		n := hilo(bb[1], bb[2])
-		p := hilo(bb[3], bb[4])
-		v := make([]byte, n)
-		read(wire, v)
-		fromMcp <- packet{c, p, v}
-	}
+func loopFromChannelToMcp() {
+    defer func() {
+        r := recover()
+        if r != nil {
+            Logf("loopFromChannelToMcp: Closing mcp because %v", r)
+            mcp.Close()
+        }
+    }()
+
+    const N = 128
+	var bb [N]byte
+    for {
+        x, ok := <-channel
+        if (!ok) {
+            return
+        }
+        if x <= 128 {
+            // Low numbers are logged to stderr.
+            Value(os.Stdout.Write([]byte{x}))
+        } else {
+            // High number start a sequence to MCP.
+            size := int(x-128)
+            for i:=0; i < size ; i++ {
+                y, ok := <-channel
+                if (!ok) {
+                    return
+                }
+                bb[i] = y
+            }
+            Value(mcp.Write(bb[:size]))
+        }
+    }
 }
 
-func loopToMcp() {
-	for {
-		a := <-toMcp
-		n := word(len(a.v))
-		q := [5]byte{a.c, hi(n), lo(n), hi(a.p), lo(a.p)}
-		write(wire, q[:])
-		write(wire, a.v)
-	}
+func feedFirmwareToWire() {
+    for i := 10; i > 0; i-- {
+        Logf("delay %d");
+        time.Sleep(time.Second)
+    }
+    Logf("Go.")
+    bb := Value(os.ReadFile(*FIRMWARE))
+    Value(wire.Write(bb))
 }
+
+////////////////////////////////////////////////////////////////////////
 
 func run() {
 	// Open wire connection to Bonobo
@@ -98,20 +115,19 @@ func run() {
 	defer mcp.Close()
 	Logf("TCP mcp opened %q", *MCP)
 
-	go loopToWire()
-	go loopToMcp()
+    channel = make(chan byte)
 
-	for {
-		select {
-		case a := <-fromWire:
-			doFromWire(a)
-		case a := <-fromMcp:
-			doFromMcp(a)
-		}
-	}
+/*
+    feedFirmwareToWire();
+*/
+
+	go loopFromMcpToWire()
+	go loopFromWireToChannel()
+    loopFromChannelToMcp()
 }
 
 func tryRun() {
+    // Make one attempt to run, catching any panic.
 	defer func() {
 		r := recover()
 		if r != nil {
@@ -123,46 +139,17 @@ func tryRun() {
 
 func main() {
 	log.SetFlags(0)
-	log.SetPrefix("# ")
+	log.SetPrefix("T# ")
 	flag.Parse()
 
 	for {
 		tryRun()
+        // when disconnected, wait a second before retry.
 		time.Sleep(time.Second)
 	}
 }
 
-const (
-	LOG_PACKET = 7
-)
-
-func doFromWire(a packet) {
-	if a.c == LOG_PACKET {
-		Logf("fromWire: %q", a.v)
-		return
-	}
-
-	toMcp <- a
-}
-
-func doFromMcp(a packet) {
-	if a.c == LOG_PACKET {
-		Logf("fromMcp: %q", a.v)
-		return
-	}
-
-	toWire <- a
-}
-
-func read(r io.Reader, bb []byte) {
-	n := Value(io.ReadFull(r, bb))
-	assertEq(n, len(bb))
-}
-func write(w io.Writer, bb []byte) {
-	n := Value(w.Write(bb))
-	assertEq(n, len(bb))
-}
-
+/*
 func hi(a word) byte {
 	return byte(a >> 8)
 }
@@ -172,6 +159,7 @@ func lo(a word) byte {
 func hilo(hi, lo byte) word {
 	return (word(hi) << 8) | word(lo)
 }
+*/
 
 func assertEq[T Ordered](a, b T) {
 	if a != b {

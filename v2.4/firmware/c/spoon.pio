@@ -1,32 +1,35 @@
 ; on_reset.pio -- for bonobo 2.4 -- strick
 ; SPDX-License-Identifier: MIT
 
-; E_PIN = 21
+;; E_PIN = 21
 
-.program onreset_pio
+.program spoon_pio
 .side_set 4 opt
 
     ; synchronize on a full pulse of E
     wait    1 gpio, 21    ; wait until E hi
     wait    0 gpio, 21    ; wait until E lo
 
-    set     x, 3        side 0b0111 ; all=no (unhalts)
-four_times:
-    wait    1 gpio, 21
+    set     x, 2         side 0b0111  ; 2 because 3 times; all=no (unhalts)
+three_times:
+    wait    1 gpio, 21                
     wait    0 gpio, 21
-    nop
-    jmp     x--, four_times
+    jmp     x--, three_times
 
+    set     x, 4                      ; 4 because 5 times.
     out     pindirs, 8  side 0b0010  ; spoon=Yes slenb=Yes dir=Out
+file_times:
     out     pins, 8
     wait    1 gpio, 21
     wait    0 gpio, 21
-    nop
+    jmp     x--, file_times
+
+    ; sixth time is unrolled
     out     pins, 8
-    wait    1 gpio, 21    side 0b0101  ; early for 6809
+    wait    1 gpio, 21    side 0b0101 ; early for 6809
     wait    0 gpio, 21
-    nop
-    out     pindirs, 8    side 0b0101   ; spoon=Yes halt=Yes
+
+    out     pindirs, 8    side 0b0101  ; spoon=Yes halt=Yes
 
 loop_forever:
     jmp     loop_forever
@@ -34,7 +37,7 @@ loop_forever:
 
 % c-sdk {
 
-void onreset_program_init(PIO pio, uint sm, uint offset) {
+void spoon_program_init(PIO pio, uint sm, uint offset) {
    //
    //  pico-examples/pio/hub75/hub75.pio shows order of inits.
    //
@@ -46,7 +49,7 @@ void onreset_program_init(PIO pio, uint sm, uint offset) {
        pio_gpio_init(pio, i);
    }
 
-   pio_sm_config cf = onreset_pio_program_get_default_config(offset);
+   pio_sm_config cf = spoon_pio_program_get_default_config(offset);
    // sm_config_set_jmp_pin(&cf, 8);
    // sm_config_set_in_pins(&cf, 8); // not used.
    sm_config_set_out_pins(&cf, 8, 8);
