@@ -26,7 +26,8 @@ file_times:
 
     ; sixth time is unrolled
     out     pins, 8
-    wait    1 gpio, 21    side 0b0101 ; early for 6809
+    ;;;;;;wait    1 gpio, 21    side 0b0101 ; early for 6809
+    wait    1 gpio, 21    side 0b0000 ; unhalt early for 6809
     wait    0 gpio, 21
 
     out     pindirs, 8    side 0b0101  ; spoon=Yes halt=Yes
