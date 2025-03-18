@@ -224,7 +224,7 @@ int main() {
   printf("*** HELLO BONOBO\n");
   for (uint i =0; i < 256; i++) dma_buffer[i] = (byte)(i ^ 8);
 
-  InitialBlinks();
+  // InitialBlinks();
 
   extern void spoonfeed();
   spoonfeed();
