@@ -376,8 +376,8 @@ void spoonfeed() {
     } while (reset == false);
     printf(" Reset gone. ");
 
-    sleep_ms(1000);
-    printf(" Slept 1sec.\n");
+    sleep_ms(400);
+    printf(" Slept \n");
 
     pio_clear_instruction_memory(pio0);
     pio_sm_restart (pio0, sm0);
@@ -423,9 +423,8 @@ void spoonfeed() {
 
         pio_sm_exec(pio0, sm1, offset1);       // Jump to start of spoon_pio_program
         pio_sm_set_enabled(pio0, sm1, true);  // Run.
-        sleep_ms(1);                         // long enough.
+        sleep_us(20);                         // long enough.
         pio_sm_set_enabled(pio0, sm1, false);  // Stop.
-        sleep_ms(1);
     }
 
     const unsigned int* start2 = PairsOfWords;
@@ -440,9 +439,8 @@ void spoonfeed() {
 
         pio_sm_exec(pio0, sm1, offset1);       // Jump to start of spoon_pio_program
         pio_sm_set_enabled(pio0, sm1, true);  // Run.
-        sleep_ms(1);                         // long enough.
+        sleep_us(20);                         // long enough.
         pio_sm_set_enabled(pio0, sm1, false);  // Stop.
-        sleep_ms(1);
     }
 
     pio_remove_program_and_unclaim_sm(&spoon_pio_program,

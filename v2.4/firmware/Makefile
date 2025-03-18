@@ -1,6 +1,6 @@
 all: decb_to_word_pairs.elf
 	sh compile-and-wrap-with-py.sh  life-semi.c bonobo-life-semi.py
-	./decb_to_word_pairs.elf "c" < life-semi.decb > c/life-semi.decb.for-c.h
+	./decb_to_word_pairs.elf "c" < life-semi.decb > demo-life-semi-c/life-semi.decb.for-c.h
 
 decb_to_word_pairs.elf: decb_to_word_pairs.c
 	$(CC) $(CFLAGS) -o decb_to_word_pairs.elf decb_to_word_pairs.c
