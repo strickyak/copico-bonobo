@@ -408,7 +408,9 @@ void spoonfeed() {
     pio_sm_claim(pio0, sm1);
     const uint offset1 = pio_add_program(pio0, &spoon_pio_program);
     spoon_program_init(pio0, sm1, offset1);
+#if 1
 
+    // COCO3 version, works with 6309 (SJC COCO 3B, AGS COCO3).
     const unsigned short* start1 = COCO3_INIT_DATA;
     const unsigned short* limit1 = (const unsigned short*)(
          (char*)COCO3_INIT_DATA + sizeof COCO3_INIT_DATA);
@@ -426,6 +428,22 @@ void spoonfeed() {
         sleep_us(20);                         // long enough.
         pio_sm_set_enabled(pio0, sm1, false);  // Stop.
     }
+#else
+
+    // COCO2 version -- did not work.
+    for (uint _addr = 0xFFC0; _addr < 0xFFE0; _addr += 2) {
+        uint _byte = 42;
+        uint w1 = ((_byte&0xFF) << 24) | 0xCCFF; // CC = LDD immediate
+        uint w2 = ((_addr&0xFF) << 16) | (_addr & 0xFF00) | 0xF7; // F7 = STB extended
+        pio_sm_put(pio0, sm1, w1);
+        pio_sm_put(pio0, sm1, w2);
+
+        pio_sm_exec(pio0, sm1, offset1);       // Jump to start of spoon_pio_program
+        pio_sm_set_enabled(pio0, sm1, true);  // Run.
+        sleep_us(20);                         // long enough.
+        pio_sm_set_enabled(pio0, sm1, false);  // Stop.
+    }
+#endif
 
     const unsigned int* start2 = PairsOfWords;
     const unsigned int* limit2 = (const unsigned int*)(
