@@ -13,57 +13,78 @@
 #include <pico/time.h>
 #include <stdio.h>
 
-#include <functional>
+// Bonobo 2.4 GPIO Pin Assignments
+// outputs:
+#define G_LED 25
+#define G_CART 6  // only effective is SPOON=0
+#define G_NMI 7   // only effective is SPOON=0
+
+// data bus:
+#define G_D_BEGIN 8
+#define G_D_SIZE 8
+#define G_D_LIMIT (G_D_BEGIN + G_D_SIZE)
+
+// outputs:
+#define G_DIR 16    // data bus direction. 0=toCoco 1=toPico
+#define G_HALT 17   // only effective is SPOON=0
+#define G_SLENB 18  // only effective is SPOON=0
+#define G_SPOON 19  // 0=drives CART, NMI, HALT, and SLENB to coco
+
+// inputs:
+#define G_RESET 20
+#define G_ECLK 21
+#define G_WC 22
+#define G_RC 26
+#define G_WD 27
+#define G_RD 28
+
+// uint widebuf[100];
 
 extern "C" {
 extern int stdio_usb_in_chars(char* buf, int length);
 }
-#define likely(x) __builtin_expect(!!(x), 1)
-#define unlikely(x) __builtin_expect(!!(x), 0)
-#define force_inline inline __attribute__((always_inline))
+
+#define LIKELY(x) __builtin_expect(!!(x), 1)
+#define UNLIKELY(x) __builtin_expect(!!(x), 0)
+#define FORCE_INLINE inline __attribute__((always_inline))
 
 typedef unsigned char byte;
 typedef unsigned int word;
 
-#include "on_reset.pio.h"
-#include "spoon.pio.h"
-#include "control.pio.h"
-#include "status.pio.h"
-#include "read.pio.h"
-#include "write.pio.h"
-
 #include "_nekot1.decb.h"
 #include "bootdata.h"
 
-byte hi(word w) {
-    return (byte)(w>>8);
-}
-byte lo(word w) {
-    return (byte)w;
-}
-word hilo(byte hi, byte lo) {
-    return (word(hi)<<8) | word(lo);
-}
+#include "control.pio.h"
+#include "on_reset.pio.h"
+#include "read.pio.h"
+#include "spoon.pio.h"
+#include "status.pio.h"
+#include "write.pio.h"
+
+// For USB Serial: PutByte & TryGetByte.
 
 void putbyte(byte x) { putchar_raw(x); }
 
-bool getbyte(byte* ptr) {
-      int rc = stdio_usb_in_chars((char*)ptr, 1);
-      return (rc != PICO_ERROR_NO_DATA);
+bool TryGetByte(byte* ptr) {
+  int rc = stdio_usb_in_chars((char*)ptr, 1);
+  return (rc != PICO_ERROR_NO_DATA);
 }
+
+// For GPIO in main core.
 
 void InPin(int p) {
-    gpio_init(p);
-    gpio_set_dir(p, GPIO_IN);
+  gpio_init(p);
+  gpio_set_dir(p, GPIO_IN);
 }
 void OutPin(int p, uint value) {
-    gpio_init(p);
-    gpio_set_dir(p, GPIO_OUT);
-    gpio_put(p, value);
+  gpio_init(p);
+  gpio_set_dir(p, GPIO_OUT);
+  gpio_put(p, value);
 }
 
-constexpr uint LED_PIN = 25;
-void LED(uint x) { gpio_put(LED_PIN, x); }
+// LED for fun
+
+void LED(bool x) { gpio_put(G_LED, x); }
 
 uint WAIT_GET(PIO pio, uint sm) {
   while (pio_sm_is_rx_fifo_empty(pio, sm)) continue;
@@ -71,19 +92,19 @@ uint WAIT_GET(PIO pio, uint sm) {
   return pio_sm_get(pio, sm);
 }
 
-bool TryGetFromFifo(PIO pio, uint sm, byte* octet_ptr) {
+// FIFO Operations
+
+bool TryFifoGet(PIO pio, uint sm, byte* octet_ptr) {
   if (pio_sm_is_rx_fifo_empty(pio, sm)) return false;
 
   *octet_ptr = pio_sm_get(pio, sm);
   return true;
 }
 
-void PUT(PIO pio, uint sm, uint x) {
-  pio_sm_put(pio, sm, x);
-}
+void FifoPut(PIO pio, uint sm, uint x) { pio_sm_put(pio, sm, x); }
 
 void InitialBlinks() {
-  for (uint blink = 0; blink < 5; blink++) {
+  for (uint blink = 0; blink < 3; blink++) {
     LED(0);
     sleep_ms(500);
     LED(1);
@@ -108,19 +129,17 @@ class CircBuf {
       return nextIn + N - nextOut;
   }
 
-  byte Peek() { return buf[nextOut]; }
-
   byte Take() {
     byte z = buf[nextOut];
     ++nextOut;
-    if (nextOut >= N) nextOut = 0;
+    if (nextOut == N) nextOut = 0;
     return z;
   }
 
   void Put(byte x) {
     buf[nextIn] = x;
     ++nextIn;
-    if (nextIn >= N) nextIn = 0;
+    if (nextIn == N) nextIn = 0;
   }
 };
 CircBuf<20000> McpBuf;
@@ -129,53 +148,49 @@ void StartPio1() {
   constexpr uint sm0 = 0, sm1 = 1, sm2 = 2, sm3 = 3;
 
   pio_clear_instruction_memory(pio1);
-  pio_sm_restart (pio1, sm0);
-  pio_sm_restart (pio1, sm1);
-  pio_sm_restart (pio1, sm2);
-  pio_sm_restart (pio1, sm3);
+  pio_sm_restart(pio1, sm0);
+  pio_sm_restart(pio1, sm1);
+  pio_sm_restart(pio1, sm2);
+  pio_sm_restart(pio1, sm3);
 
   pio_sm_claim(pio1, sm0);
   const uint offset0 = pio_add_program(pio1, &control_pio_program);
   control_pio_init(pio1, sm0, offset0);
-  pio_sm_clear_fifos(pio1, sm0);
 
   pio_sm_claim(pio1, sm1);
   const uint offset1 = pio_add_program(pio1, &status_pio_program);
   status_pio_init(pio1, sm1, offset1);
-  pio_sm_clear_fifos(pio1, sm1);
 
   pio_sm_claim(pio1, sm2);
   const uint offset2 = pio_add_program(pio1, &read_pio_program);
   read_pio_init(pio1, sm2, offset2);
-  pio_sm_clear_fifos(pio1, sm2);
 
   pio_sm_claim(pio1, sm3);
   const uint offset3 = pio_add_program(pio1, &write_pio_program);
   write_pio_init(pio1, sm3, offset3);
-  pio_sm_clear_fifos(pio1, sm3);
 
-  printf("PIO prog offsets: %d, %d, %d, %d\n",
-    offset0, offset1, offset2, offset3);
+  printf("PIO prog offsets: %d, %d, %d, %d\n", offset0, offset1, offset2,
+         offset3);
 }
 
 void Panic() {
-    printf("\nPanic!\n");
-    while (true) {
-        // Triple blinking, a second apart.
-        LED(1);
-        sleep_ms(200);
-        LED(0);
-        sleep_ms(200);
-        LED(1);
-        sleep_ms(200);
-        LED(0);
-        sleep_ms(200);
-        LED(1);
-        sleep_ms(200);
+  printf("\nPanic!\n");
+  while (true) {
+    // Triple blinking, a second apart.
+    LED(1);
+    sleep_ms(200);
+    LED(0);
+    sleep_ms(200);
+    LED(1);
+    sleep_ms(200);
+    LED(0);
+    sleep_ms(200);
+    LED(1);
+    sleep_ms(200);
 
-        LED(0);
-        sleep_ms(1000);
-    }
+    LED(0);
+    sleep_ms(1000);
+  }
 }
 
 // READ PIO DMA: The first read is lost, from bigger[0].
@@ -184,361 +199,358 @@ void Panic() {
 // but does not cause "direction" to change,
 // so what is going on in the state machine!?
 
-constexpr uint HACK = 1; // Mark where our DMA ReadToCoco is Off by One and Hacked.
+constexpr uint HACK =
+    1;  // Mark where our DMA ReadToCoco is Off by One and Hacked.
 byte bigger[256 + HACK];
-#define dma_buffer (bigger+HACK)
+#define dma_buffer (bigger + HACK)
 
-void StartDmaTx(int channel, dma_channel_config *config, uint size) {
-        constexpr uint sm2 = 2;
+void StartDmaTx(int channel, dma_channel_config* config, uint size) {
+#if 0
+  constexpr uint sm2 = 2;
+
+  // enable DMA
+  channel_config_set_read_increment(config, true);
+  channel_config_set_write_increment(config, false);
+  channel_config_set_dreq(config, pio_get_dreq(pio1, sm2, /*is_tx*/ true));
+
+  channel_config_set_transfer_data_size(config, DMA_SIZE_8);
+  channel_config_set_irq_quiet(config, true);
+
+  channel_config_set_enable(config, true);
+
+  dma_channel_configure(
+      channel,          // Channel to be configured
+      config,           // The configuration we just created
+      &pio1->txf[sm2],  // The initial write address
+      dma_buffer -
+          HACK,     // The initial read address ([HACK] with 1 waste at front)
+      size + HACK,  // Number of transfers, [HACK] counting 1 waste at back.
+      true          // Start immediately.
+  );
+#endif
+}
+
+void Operate(int channel, dma_channel_config* config) {
+#if 0
+  int lit = 0;
+  int count = 0;
+  uint num_bytes_to_mcp = 0;
+
+  while (true) {
+    bool reset = gpio_get(G_RESET);
+    if (reset == false) {  // Active Low
+      printf("\nOperate got RESET\n");
+      break;
+    }
+
+    byte octet;
+    ////////////// From MCP
+    // Attempt to get a byte from the MCP.
+    // If we get one, add it to the McpBuf.
+    if (TryGetByte(&octet)) {
+#if 1
+      McpBuf.Put(octet);
+#endif
+    }
+    ////////////// From COCO
+    constexpr uint sm0 = 0, sm1 = 1, sm2 = 2, sm3 = 3;
+
+    if (TryFifoGet(pio1, sm0, &octet)) {
+      byte status_reply = 1;  // the default
+      if (1 <= octet && octet <= 100) {
+        // COCO READS n BYTES FROM MCP.
+        uint n = octet;
+        // printf("[%d]  %d: coco reads %d bytes\n", count, octet, n);
+        printf("[%c,%c]\n", '0' + count, 'A' + octet);
+
+        uint buffered = McpBuf.NumBytesBuffered();
+        if (buffered < n) {
+          printf("PANIC: wanted %d bytes from MCP, only %d buffered.\n", n,
+                 buffered);
+          Panic();
+        }
+        // GetBytesFromTether:
+        for (uint i = 0; i < n; i++) {
+          dma_buffer[i] = McpBuf.Take();
+          printf(" %dg%d ", i, dma_buffer[i]);
+        }
+        printf("\n");
+        StartDmaTx(channel, config, n);
+
+      } else if (101 <= octet && octet <= 200) {
+        // COCO WRITES n BYTES TO MCP.
+        uint n = octet - 100;
+        // printf("[%d]  %d: coco writes %d bytes for MCP\n", count, octet, n);
+        printf("[%c,%c]\n", '0' + count, 'a' + octet - 100);
+
+        if (num_bytes_to_mcp != 0) {
+          printf(
+              "Got octet %d but num_bytes_to_mcp is %d and it should be "
+              "zero.\n",
+              octet, num_bytes_to_mcp);
+          Panic();
+        }
+
+        // X// for (uint i = 8; i < 16; i++) InPin(i);
 
         // enable DMA
-        channel_config_set_read_increment(config, true);
-        channel_config_set_write_increment(config, false);
+        channel_config_set_read_increment(config, false);
+        channel_config_set_write_increment(config, true);
         channel_config_set_dreq(config,
-                                pio_get_dreq(pio1, sm2, /*is_tx*/true));
+                                pio_get_dreq(pio1, sm3, /*is_tx*/ false));
 
         channel_config_set_transfer_data_size(config, DMA_SIZE_8);
         channel_config_set_irq_quiet(config, true);
 
         channel_config_set_enable(config, true);
 
-        dma_channel_configure(
-            channel,            // Channel to be configured
-            config,            // The configuration we just created
-            &pio1->txf[sm2],    // The initial write address
-            dma_buffer - HACK,  // The initial read address ([HACK] with 1 waste at front)
-            size + HACK,           // Number of transfers, [HACK] counting 1 waste at back.
-            true                // Start immediately.      
+        // X// io_rw_8 *rxfifo = (io_rw_8 *) &pio1->rxf[sm3];
+        auto rxfifo = &pio1->rxf[sm3];
+
+        dma_channel_configure(channel,     // Channel to be configured
+                              config,      // The configuration we just created
+                              dma_buffer,  // The initial write address
+                              rxfifo,      // The initial read address
+                              n,           // Number of transfers
+                              true         // Start immediately.
         );
+
+        num_bytes_to_mcp = n;
+
+      } else if (octet == 250) {
+        // QUERY SIZE OF MCP IN BUFFER
+        uint size = McpBuf.NumBytesBuffered();
+        printf("[%d]  %d: querying size => %d from MCP buffered\n", count,
+               octet, size);
+
+        dma_buffer[0] = (byte)(size >> 8);
+        dma_buffer[1] = (byte)(size >> 0);
+        StartDmaTx(channel, config, 2);
+
+      } else if (octet == 251) {
+        // PUSH num_bytes_to_mcp TO MCP.
+        printf("[%d]  %d: Going to push %d bytes to MCP\n", count, octet,
+               num_bytes_to_mcp);
+
+        if (!(1 <= num_bytes_to_mcp && num_bytes_to_mcp <= 100)) {
+          printf("Got octet %d (PUSH) but num_bytes_to_mcp is %d\n", octet,
+                 num_bytes_to_mcp);
+          Panic();
+        }
+
+        for (uint i = 0; i < num_bytes_to_mcp; i++) {
+          printf(" %dp%d ", i, dma_buffer[i]);
+        }
+        printf("\n");
+
+        // First byte of the group is 128 plus the size of the payload.
+        // Followed by that many payload bytes.
+        PutByte(128 + num_bytes_to_mcp);
+        // Now send that many data bytes.
+        for (uint i = 0; i < num_bytes_to_mcp; i++) {
+          PutByte(dma_buffer[i]);
+        }
+        num_bytes_to_mcp = 0;
+
+      } else if (octet == 252) {
+        // Bonobo Presence Query
+        printf("\n[%d] Probe 252->'b'\n", count);
+        status_reply = 'b';  // A special answer.
+      } else {
+        printf("\n[%d] Panic: bad command byte %d\n", count, octet);
+        Panic();
+      }
+
+      // printf("A<%d.%d>", pio_sm_is_tx_fifo_empty(pio1, sm1),
+             // pio_sm_is_tx_fifo_full(pio1, sm1));
+      FifoPut(pio1, sm1, 241);  // Try a junk first.
+      // printf("B<%d.%d>", pio_sm_is_tx_fifo_empty(pio1, sm1),
+             // pio_sm_is_tx_fifo_full(pio1, sm1));
+      FifoPut(pio1, sm1, status_reply);  // Status is now 1: Ready.
+      // printf("C<%d.%d>", pio_sm_is_tx_fifo_empty(pio1, sm1),
+             // pio_sm_is_tx_fifo_full(pio1, sm1));
+      FifoPut(pio1, sm1, 244);  // Try a junk first.
+      // printf("D<%d.%d>", pio_sm_is_tx_fifo_empty(pio1, sm1),
+             // pio_sm_is_tx_fifo_full(pio1, sm1));
+
+      printf("[%d] -> %d.\n", count, status_reply);
+
+      LED(lit);
+      lit = !lit;
+      count++;
+    }
+  }
+#endif
 }
 
-// Bonobo 2.4 GPIO Pin Assignments
-#define G_CART   6
-#define G_NMI    7
-#define G_DIR   16
-#define G_HALT  17
-#define G_SLENB 18
-#define G_SPOON 19
-#define G_RESET 20
-#define G_ECLK  21
+void SpoonFeed() {
+  // SpoonFeeding uses pio0.
+  const PIO pioSF = pio0;
+  // SpoonFeeding needs two State Machines:
+  //   0.  smR (for two-byte reset vector) 
+  //   1.  smF (for six-fetch opcode feeding)
+  constexpr uint smR = 0, smF = 1, sm2 = 2, sm3 = 3;
 
-uint widebuf[100];
+  bool reset;
+  do {
+    // wait for RESET to activate
+    reset = gpio_get(G_RESET);
+  } while (reset == true);
+  printf("SpoonFeed: Got reset.\n");
 
-void Operate(int channel, dma_channel_config *config) {
-      int lit = 0;
-      int count = 0;
-      uint num_bytes_to_mcp = 0;
+  gpio_put(G_HALT, 0);   // Activate HALT
+  gpio_put(G_SPOON, 0);  // Activate SPOON
+  sleep_ms(100);
+  printf(" Debounced. ");
 
-      while (true) {
-        bool reset = gpio_get(G_RESET);
-        if (reset == false) { // Active Low
-            printf("\nOperate got RESET\n");
-            break;
-        }
+  do {
+    // wait for RESET to finish
+    sleep_ms(50);
+    reset = gpio_get(G_RESET);
+  } while (reset == false);
+  printf(" Reset gone. ");
 
-        byte octet;
-#if 0
-        ////////////// From MCP
-        // Attempt to get a byte from the MCP.
-        // If we get one, add it to the McpBuf.
-        if (getbyte(&octet)) {
-            McpBuf.Put(octet);
-        }
-#endif
-        ////////////// From COCO
-        constexpr uint sm0 = 0, sm1 = 1, sm2 = 2, sm3 = 3;
+  sleep_ms(400);  // Time for other hardware to reset.
+  printf(" Slept.\n");
 
-        if (TryGetFromFifo(pio1, sm0, &octet)) {
+  pio_clear_instruction_memory(pioSF);
+  pio_sm_restart(pioSF, smR);
+  pio_sm_restart(pioSF, smF);
+  pio_sm_restart(pioSF, sm2);
+  pio_sm_restart(pioSF, sm3);
 
-            byte status_reply = 1;  // the default
-            if (1 <= octet && octet <= 100) {
-                // COCO READS n BYTES FROM MCP.
-                uint n = octet;
-                //printf("[%d]  %d: coco reads %d bytes\n", count, octet, n);
-                printf("[%c,%c]\n", '0'+count, 'A'+octet);
+  ///////////////////////////////
+  //
+  //  smR  (for reset vectors)
 
-                uint buffered = McpBuf.NumBytesBuffered();
-                if (buffered < n) {
-                    printf("PANIC: wanted %d bytes from MCP, only %d buffered.\n",
-                            n, buffered);
-                    Panic();
-                }
-                // GetBytesFromTether:
-                for (uint i = 0; i < n; i++) {
-                    dma_buffer[i] = McpBuf.Take();
-                    printf(" %dg%d ", i, dma_buffer[i]);
-                }
-                printf("\n");
-                StartDmaTx(channel, config, n);
+  // Now these are under PIO control with smR.
+  pio_sm_set_consecutive_pindirs(pioSF, smR, 8, 8, false/*in*/);  // data bus
+  pio_sm_set_consecutive_pindirs(pioSF, smR, 16, 4, true/*out*/); // spoon control
+  pio_sm_set_consecutive_pindirs(pioSF, smR, 20, 2, false/*in*/); // reset, Eclk
+  for (uint i = 8; i < 20; i++) {
+    pio_gpio_init(pioSF, i);
+  }
 
-            } else if (101 <= octet && octet <= 200) {
-                // COCO WRITES n BYTES TO MCP.
-                uint n = octet-100;
-                // printf("[%d]  %d: coco writes %d bytes for MCP\n", count, octet, n);
-                printf("[%c,%c]\n", '0'+count, 'a'+octet-100);
+  pio_sm_claim(pioSF, smR);
+  const uint offsetR = pio_add_program(pioSF, &onreset_pio_program);
+  onreset_program_init(pioSF, smR, offsetR);
 
-                if (num_bytes_to_mcp != 0) {
-                    printf("Got octet %d but num_bytes_to_mcp is %d and it should be zero.\n", octet, num_bytes_to_mcp);
-                    Panic();
-                }
+  // FF=outputs $8888=reset_vector 00=inputs
+  pio_sm_put(pioSF, smR, 0x008888FF);
+  pio_sm_set_enabled(pioSF, smR, true);   // Run.
+  sleep_ms(1);                           // long enough.
+  pio_sm_set_enabled(pioSF, smR, false);  // Stop.
+  pio_remove_program_and_unclaim_sm(&onreset_pio_program, pioSF, smR, offsetR);
 
-                //X// for (uint i = 8; i < 16; i++) InPin(i);
+  ///////////////////////////////
+  //
+  //  smF  (for six-byte fetch sequences)
 
-#if 0
-                // SEE after status read.
-#else
-                // enable DMA
-                channel_config_set_read_increment(config, false);
-                channel_config_set_write_increment(config, true);
-                channel_config_set_dreq(config,
-                                        pio_get_dreq(pio1, sm3, /*is_tx*/false));
+  // Now these are under PIO control with smF.
+  pio_sm_set_consecutive_pindirs(pioSF, smF, 8, 8, false/*in*/);  // data bus
+  pio_sm_set_consecutive_pindirs(pioSF, smF, 16, 4, true/*out*/); // spoon control
+  pio_sm_set_consecutive_pindirs(pioSF, smF, 20, 2, false/*in*/); // reset, Eclk
+  for (uint i = 8; i < 20; i++) {
+    pio_gpio_init(pioSF, i);
+  }
 
-                channel_config_set_transfer_data_size(config, DMA_SIZE_8);
-                channel_config_set_irq_quiet(config, true);
+  pio_sm_claim(pioSF, smF);
+  const uint offsetF = pio_add_program(pioSF, &spoon_pio_program);
+  spoon_program_init(pioSF, smF, offsetF);
 
-                channel_config_set_enable(config, true);
+  // TODO: fix the data to work on COCO1 & 2.
+  const unsigned short* startF = COCO3_INIT_DATA;
+  const unsigned short* limitF =
+      (const unsigned short*)((char*)COCO3_INIT_DATA + sizeof COCO3_INIT_DATA);
 
-                //X// io_rw_8 *rxfifo = (io_rw_8 *) &pio1->rxf[sm3];
-                auto rxfifo =  &pio1->rxf[sm3];
+  for (const unsigned short* p = startF; p < limitF; p += 2) {
+    uint addr = p[0];
+    uint value = p[1];  // one-byte value to put at addr.
+    uint w1 = ((value & 0xFF) << 24) | 0xCCFF;  // CC = LDD immediate
+    uint w2 =
+        ((addr & 0xFF) << 16) | (addr & 0xFF00) | 0xF7;  // F7 = STB extended
+    pio_sm_put(pioSF, smF, w1);
+    pio_sm_put(pioSF, smF, w2);
 
-                dma_channel_configure(
-                    channel,           // Channel to be configured
-                    config,           // The configuration we just created
-                    dma_buffer,           // The initial write address
-                    rxfifo ,   // The initial read address
-                    n,                 // Number of transfers
-                    true               // Start immediately.      
-                );
-#endif
+    pio_sm_exec(pioSF, smF, offsetF);       // Jump to start of spoon_pio_program
+    pio_sm_set_enabled(pioSF, smF, true);   // Run.
+    sleep_us(20);                          // long enough for unhalting & two instructions.
+    pio_sm_set_enabled(pioSF, smF, false);  // Stop.
+  }
 
-                num_bytes_to_mcp = n;
+  // The big table PairsOfWords contains pairs of words (representing two opcodes each)
+  // premade ready for shoving into the FIFO of smF with pio_sm_put.
+  const unsigned int* start2 = PairsOfWords;
+  const unsigned int* limit2 =
+      (const unsigned int*)((char*)PairsOfWords + sizeof PairsOfWords);
 
-            } else if (octet == 250) {
-                // QUERY SIZE OF MCP IN BUFFER
-                uint size = McpBuf.NumBytesBuffered();
-                printf("[%d]  %d: querying size => %d from MCP buffered\n", count, octet, size);
+  for (const unsigned int* p = start2; p < limit2; p += 2) {
+    pio_sm_put(pioSF, smF, p[0]);
+    pio_sm_put(pioSF, smF, p[1]);
 
-                dma_buffer[0] = (byte)(size >> 8);
-                dma_buffer[1] = (byte)(size >> 0);
-                StartDmaTx(channel, config, 2);
+    pio_sm_exec(pioSF, smF, offsetF);       // Jump to start of spoon_pio_program
+    pio_sm_set_enabled(pioSF, smF, true);   // Run.
+    sleep_us(20);                           // long enough for unhalting & two instructions.
+    pio_sm_set_enabled(pioSF, smF, false);  // Stop.
+  }
 
-            } else if (octet == 251) {
-                // PUSH num_bytes_to_mcp TO MCP.
-                printf("[%d]  %d: Going to push %d bytes to MCP\n", count, octet, num_bytes_to_mcp);
+  pio_remove_program_and_unclaim_sm(&spoon_pio_program, pioSF, smF, offsetF);
 
-                if (!(1 <= num_bytes_to_mcp && num_bytes_to_mcp <= 100)) {
-                    printf("Got octet %d (PUSH) but num_bytes_to_mcp is %d\n", octet, num_bytes_to_mcp);
-                    Panic();
-                }
+  ////////////////////////////////////
+  //
+  //  Exiting spoonfeed,
 
-                for (uint i = 0; i < num_bytes_to_mcp; i++) {
-                    printf(" %dp%d ", i, dma_buffer[i]);
-                }
-                printf("\n");
+  // changing those side_set outputs to control by GPIO,
+  // and set all of these pins high (inactive),
+  OutPin(G_DIR, 1);
+  OutPin(G_HALT, 1);
+  OutPin(G_SLENB, 1);
+  OutPin(G_SPOON, 1);
+}  // SpoonFeed
 
-                // First byte of the group is 128 plus the size of the payload.
-                // Followed by that many payload bytes.
-                putbyte(128 + num_bytes_to_mcp);
-                // Now send that many data bytes.
-                for (uint i = 0; i < num_bytes_to_mcp; i++) {
-                    putbyte(dma_buffer[i]);
-                }
-                num_bytes_to_mcp = 0;
+// Define an initial direction to everything,
+// claiming them as "gpio" controlled,
+// even if we will change some of these later.
+void InitialGpioDirections() {
+  OutPin(G_CART, 1);
+  OutPin(G_NMI, 1);
+  for (uint i = G_D_BEGIN; i < G_D_LIMIT; i++) InPin(i);  // Data bus.
+  OutPin(G_SPOON, 1);  // spoon
+  OutPin(G_DIR, 1);    // direction
+  OutPin(G_HALT, 1);   // halt
+  OutPin(G_SLENB, 1);  // slenb
 
-            } else if (octet == 252) {
-                // Bonobo Presence Query
-                printf("\n[%d] Probe 252->'b'\n", count);
-                status_reply = 'b';  // A special answer.
-            } else {
-                printf("\n[%d] Panic: bad command byte %d\n", count, octet);
-                Panic();
-            }
+  OutPin(G_LED, 1);
 
-printf("A<%d.%d>", pio_sm_is_tx_fifo_empty(pio1, sm1), pio_sm_is_tx_fifo_full(pio1, sm1));
-            PUT(pio1, sm1, 241);  // Try a junk first.
-printf("B<%d.%d>", pio_sm_is_tx_fifo_empty(pio1, sm1), pio_sm_is_tx_fifo_full(pio1, sm1));
-            PUT(pio1, sm1, status_reply);  // Status is now 1: Ready.
-printf("C<%d.%d>", pio_sm_is_tx_fifo_empty(pio1, sm1), pio_sm_is_tx_fifo_full(pio1, sm1));
-            PUT(pio1, sm1, 244);  // Try a junk first.
-printf("D<%d.%d>", pio_sm_is_tx_fifo_empty(pio1, sm1), pio_sm_is_tx_fifo_full(pio1, sm1));
+  for (uint i = 0; i < G_CART; i++) InPin(i);  // Unused.
 
-            printf("\n[%d] status_reply WAS %d.\n", count, status_reply);
-
-#if 0
-// Manual WAIT_GET instead of DMA; see above #if [01]
-            if (101 <= octet && octet <= 200) {
-                uint n = octet-100;
-                for (uint i = 0; i < n; i++) {
-                    widebuf[i] = WAIT_GET(pio1, sm3);
-                }
-                printf("GOT:\n");
-                for (uint i = 0; i < n; i++) {
-                    printf("[%d]$%x ", i, widebuf[i]);
-                }
-                printf("\n");
-                for (uint i = 0; i < n; i++) {
-                    dma_buffer[i] = (byte)widebuf[i];
-                }
-            }
-#endif
-
-            LED(lit);
-            lit = !lit;
-            count++;
-        }
-      }
+  InPin(G_RESET);  // reset
+  InPin(G_ECLK);   // E clock
+  InPin(G_WC);     // Write Control
+  InPin(G_RC);     // Read Control == Status
+  InPin(G_WD);     // Write Data
+  InPin(G_RD);     // Read Data
 }
 
 int main() {
-  OutPin(16, 1); // direction
-  OutPin(17, 1); // halt
-  OutPin(18, 1); // slenb
-  OutPin(19, 1); // spoon
-
-  for (uint i = 0; i < 16; i++) InPin(i);
-  OutPin(6, 1); // cart
-  OutPin(7, 1); // nmi
-
-  InPin(20); // reset
-  InPin(21); // E clock
-  InPin(22); // Write Control
-  InPin(26); // Read Control
-  InPin(27); // Write Data
-  InPin(28); // Read Data
-  OutPin(LED_PIN, 1);
+  InitialGpioDirections();
 
   stdio_usb_init();
   printf("*** HELLO BONOBO\n");
-  for (uint i =0; i < 256; i++) dma_buffer[i] = (byte)(i ^ 8);
+  for (uint i = 0; i < 256; i++) dma_buffer[i] = (byte)(i ^ 8);
 
   InitialBlinks();
+  // Putting StartPio1 here kills Probe later .... // StartPio1();
 
-  int channel = dma_claim_unused_channel(/*required*/true);
+  int channel = dma_claim_unused_channel(/*required*/ true);
   dma_channel_config config = dma_channel_get_default_config(channel);
 
   while (true) {
-      extern void spoonfeed();
-      spoonfeed();
+    SpoonFeed();
 
-      StartPio1();
-
-      Operate(channel, &config);
-  }
-}
-
-void spoonfeed() {
-    constexpr uint sm0 = 0, sm1 = 1, sm2 = 2, sm3 = 3;
-
-    bool reset;
-    do {
-        // wait for RESET to activate
-        reset = gpio_get(G_RESET);
-    } while (reset == true);
-    printf("spoonfeed: Got reset.\n");
-
-    gpio_put(G_HALT, 0);   // Activate HALT
-    gpio_put(G_SPOON, 0);  // Activate SPOON
-    sleep_ms(100);
-    printf(" Debounced. ");
-
-    do {
-        // wait for RESET to finish
-        reset = gpio_get(G_RESET);
-    } while (reset == false);
-    printf(" Reset gone. ");
-
-    sleep_ms(400);
-    printf(" Slept \n");
-
-    pio_clear_instruction_memory(pio0);
-    pio_sm_restart (pio0, sm0);
-    pio_sm_restart (pio0, sm1);
-    pio_sm_restart (pio0, sm2);
-    pio_sm_restart (pio0, sm3);
-
-    ///////////////////////////////
-
-    pio_sm_claim(pio0, sm0);
-    const uint offset0 = pio_add_program(pio0, &onreset_pio_program);
-    onreset_program_init(pio0, sm0, offset0);
-
-    // FF=outputs $8888=reset_vector 00=inputs
-    pio_sm_put(pio0, sm0, 0x008888FF);
-    pio_sm_set_enabled(pio0, sm0, true);  // Run.
-    sleep_ms(1);                         // long enough.
-    pio_sm_set_enabled(pio0, sm0, false);  // Stop.
-    pio_remove_program_and_unclaim_sm(&onreset_pio_program,
-            pio0, sm0, offset0);
-
-      ///////////////////////////////
-
-    pio_clear_instruction_memory(pio0);
-    pio_sm_restart (pio0, sm0);
-    pio_sm_restart (pio0, sm1);
- 
-    pio_sm_claim(pio0, sm1);
-    const uint offset1 = pio_add_program(pio0, &spoon_pio_program);
-    spoon_program_init(pio0, sm1, offset1);
-#if 1
-
-    // COCO3 version, works with 6309 (SJC COCO 3B, AGS COCO3).
-    const unsigned short* start1 = COCO3_INIT_DATA;
-    const unsigned short* limit1 = (const unsigned short*)(
-         (char*)COCO3_INIT_DATA + sizeof COCO3_INIT_DATA);
-
-    for (const unsigned short* p = start1; p < limit1; p += 2) {
-        uint _addr = p[0]; // embiggen unsigned short to uint, for sm1.
-        uint _byte = p[1];
-        uint w1 = ((_byte&0xFF) << 24) | 0xCCFF; // CC = LDD immediate
-        uint w2 = ((_addr&0xFF) << 16) | (_addr & 0xFF00) | 0xF7; // F7 = STB extended
-        pio_sm_put(pio0, sm1, w1);
-        pio_sm_put(pio0, sm1, w2);
-
-        pio_sm_exec(pio0, sm1, offset1);       // Jump to start of spoon_pio_program
-        pio_sm_set_enabled(pio0, sm1, true);  // Run.
-        sleep_us(20);                         // long enough.
-        pio_sm_set_enabled(pio0, sm1, false);  // Stop.
-    }
-#else
-
-    // COCO2 version -- did not work.
-    for (uint _addr = 0xFFC0; _addr < 0xFFE0; _addr += 2) {
-        uint _byte = 42;
-        uint w1 = ((_byte&0xFF) << 24) | 0xCCFF; // CC = LDD immediate
-        uint w2 = ((_addr&0xFF) << 16) | (_addr & 0xFF00) | 0xF7; // F7 = STB extended
-        pio_sm_put(pio0, sm1, w1);
-        pio_sm_put(pio0, sm1, w2);
-
-        pio_sm_exec(pio0, sm1, offset1);       // Jump to start of spoon_pio_program
-        pio_sm_set_enabled(pio0, sm1, true);  // Run.
-        sleep_us(20);                         // long enough.
-        pio_sm_set_enabled(pio0, sm1, false);  // Stop.
-    }
+#if 0
+    StartPio1();
+    Operate(channel, &config);
 #endif
-
-    const unsigned int* start2 = PairsOfWords;
-    const unsigned int* limit2 = (const unsigned int*)(
-         (char*)PairsOfWords + sizeof PairsOfWords);
-
-    for (const unsigned int* p = start2; p < limit2; p += 2) {
-        uint w1 = p[0];
-        uint w2 = p[1];
-        pio_sm_put(pio0, sm1, w1);
-        pio_sm_put(pio0, sm1, w2);
-
-        pio_sm_exec(pio0, sm1, offset1);       // Jump to start of spoon_pio_program
-        pio_sm_set_enabled(pio0, sm1, true);  // Run.
-        sleep_us(20);                         // long enough.
-        pio_sm_set_enabled(pio0, sm1, false);  // Stop.
-    }
-
-    pio_remove_program_and_unclaim_sm(&spoon_pio_program,
-        pio0, sm1, offset1);
-
-    OutPin(19, 1); // spoon
-
-    OutPin(16, 1); // direction
-    OutPin(17, 1); // halt
-    OutPin(18, 1); // slenb
-
-}  // spoonfeed
+  }
+}  // main

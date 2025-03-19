@@ -7,14 +7,14 @@ set(PICO_BOARD pico)
 pico_sdk_init()
 
 add_executable(${PROJECT} bonobo.cpp)
-pico_generate_pio_header(${PROJECT}  ${CMAKE_CURRENT_LIST_DIR}/on_reset.pio)
+pico_generate_pio_header(${PROJECT}  ${CMAKE_CURRENT_LIST_DIR}/vector.pio)
 pico_generate_pio_header(${PROJECT}  ${CMAKE_CURRENT_LIST_DIR}/spoon.pio)
 pico_generate_pio_header(${PROJECT}  ${CMAKE_CURRENT_LIST_DIR}/control.pio)
 pico_generate_pio_header(${PROJECT}  ${CMAKE_CURRENT_LIST_DIR}/status.pio)
 pico_generate_pio_header(${PROJECT}  ${CMAKE_CURRENT_LIST_DIR}/read.pio)
 pico_generate_pio_header(${PROJECT}  ${CMAKE_CURRENT_LIST_DIR}/write.pio)
 
-target_sources(${PROJECT} PRIVATE bonobo.cpp)
+target_sources(${PROJECT} PRIVATE bonobo.cpp bootdata.h _nekot1.decb.h)
 target_link_libraries(${PROJECT} PRIVATE pico_stdlib hardware_pio hardware_dma)
 pico_add_extra_outputs(${PROJECT})
 
