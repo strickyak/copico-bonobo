@@ -6,7 +6,7 @@
 
 .program status_pio
 .side_set 1 opt
-    set x, 0                 ; Used if status is not ready yet; try agian.
+    set x, 31                 ; Used if status is not ready yet; try again.
 
 .wrap_target
     mov osr, null    side 1  ; become inputs
@@ -17,11 +17,12 @@
     mov osr, ~ null          ; become outputs
     out pindirs, 8         
 
-    pull noblock             ; byte from FIFO, or 0 from X
+    pull noblock     side 0  ; byte from FIFO, or 0 from X
     out pins, 8      side 0
 
     wait 1 gpio 26           ; wait for strobe to finish -------
     nop           [5]
+    nop           [5]        ; let data bus linger a bit longer...
 
 .wrap
 

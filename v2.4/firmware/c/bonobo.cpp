@@ -32,7 +32,7 @@ typedef unsigned int word;
 #include "read.pio.h"
 #include "write.pio.h"
 
-#include "life-semi.decb.for-c.h"
+#include "_nekot1.decb.h"
 #include "bootdata.h"
 
 byte hi(word w) {
@@ -129,23 +129,33 @@ void StartPio1() {
   constexpr uint sm0 = 0, sm1 = 1, sm2 = 2, sm3 = 3;
 
   pio_clear_instruction_memory(pio1);
+  pio_sm_restart (pio1, sm0);
+  pio_sm_restart (pio1, sm1);
+  pio_sm_restart (pio1, sm2);
+  pio_sm_restart (pio1, sm3);
 
+  pio_sm_claim(pio1, sm0);
   const uint offset0 = pio_add_program(pio1, &control_pio_program);
   control_pio_init(pio1, sm0, offset0);
   pio_sm_clear_fifos(pio1, sm0);
-  // pio_sm_restart(pio1, sm0);
 
+  pio_sm_claim(pio1, sm1);
   const uint offset1 = pio_add_program(pio1, &status_pio_program);
   status_pio_init(pio1, sm1, offset1);
   pio_sm_clear_fifos(pio1, sm1);
 
+  pio_sm_claim(pio1, sm2);
   const uint offset2 = pio_add_program(pio1, &read_pio_program);
   read_pio_init(pio1, sm2, offset2);
   pio_sm_clear_fifos(pio1, sm2);
 
+  pio_sm_claim(pio1, sm3);
   const uint offset3 = pio_add_program(pio1, &write_pio_program);
-  read_pio_init(pio1, sm3, offset3);
+  write_pio_init(pio1, sm3, offset3);
   pio_sm_clear_fifos(pio1, sm3);
+
+  printf("PIO prog offsets: %d, %d, %d, %d\n",
+    offset0, offset1, offset2, offset3);
 }
 
 void Panic() {
@@ -202,6 +212,183 @@ void StartDmaTx(int channel, dma_channel_config *config, uint size) {
         );
 }
 
+// Bonobo 2.4 GPIO Pin Assignments
+#define G_CART   6
+#define G_NMI    7
+#define G_DIR   16
+#define G_HALT  17
+#define G_SLENB 18
+#define G_SPOON 19
+#define G_RESET 20
+#define G_ECLK  21
+
+uint widebuf[100];
+
+void Operate(int channel, dma_channel_config *config) {
+      int lit = 0;
+      int count = 0;
+      uint num_bytes_to_mcp = 0;
+
+      while (true) {
+        bool reset = gpio_get(G_RESET);
+        if (reset == false) { // Active Low
+            printf("\nOperate got RESET\n");
+            break;
+        }
+
+        byte octet;
+#if 0
+        ////////////// From MCP
+        // Attempt to get a byte from the MCP.
+        // If we get one, add it to the McpBuf.
+        if (getbyte(&octet)) {
+            McpBuf.Put(octet);
+        }
+#endif
+        ////////////// From COCO
+        constexpr uint sm0 = 0, sm1 = 1, sm2 = 2, sm3 = 3;
+
+        if (TryGetFromFifo(pio1, sm0, &octet)) {
+
+            byte status_reply = 1;  // the default
+            if (1 <= octet && octet <= 100) {
+                // COCO READS n BYTES FROM MCP.
+                uint n = octet;
+                //printf("[%d]  %d: coco reads %d bytes\n", count, octet, n);
+                printf("[%c,%c]\n", '0'+count, 'A'+octet);
+
+                uint buffered = McpBuf.NumBytesBuffered();
+                if (buffered < n) {
+                    printf("PANIC: wanted %d bytes from MCP, only %d buffered.\n",
+                            n, buffered);
+                    Panic();
+                }
+                // GetBytesFromTether:
+                for (uint i = 0; i < n; i++) {
+                    dma_buffer[i] = McpBuf.Take();
+                    printf(" %dg%d ", i, dma_buffer[i]);
+                }
+                printf("\n");
+                StartDmaTx(channel, config, n);
+
+            } else if (101 <= octet && octet <= 200) {
+                // COCO WRITES n BYTES TO MCP.
+                uint n = octet-100;
+                // printf("[%d]  %d: coco writes %d bytes for MCP\n", count, octet, n);
+                printf("[%c,%c]\n", '0'+count, 'a'+octet-100);
+
+                if (num_bytes_to_mcp != 0) {
+                    printf("Got octet %d but num_bytes_to_mcp is %d and it should be zero.\n", octet, num_bytes_to_mcp);
+                    Panic();
+                }
+
+                //X// for (uint i = 8; i < 16; i++) InPin(i);
+
+#if 0
+                // SEE after status read.
+#else
+                // enable DMA
+                channel_config_set_read_increment(config, false);
+                channel_config_set_write_increment(config, true);
+                channel_config_set_dreq(config,
+                                        pio_get_dreq(pio1, sm3, /*is_tx*/false));
+
+                channel_config_set_transfer_data_size(config, DMA_SIZE_8);
+                channel_config_set_irq_quiet(config, true);
+
+                channel_config_set_enable(config, true);
+
+                //X// io_rw_8 *rxfifo = (io_rw_8 *) &pio1->rxf[sm3];
+                auto rxfifo =  &pio1->rxf[sm3];
+
+                dma_channel_configure(
+                    channel,           // Channel to be configured
+                    config,           // The configuration we just created
+                    dma_buffer,           // The initial write address
+                    rxfifo ,   // The initial read address
+                    n,                 // Number of transfers
+                    true               // Start immediately.      
+                );
+#endif
+
+                num_bytes_to_mcp = n;
+
+            } else if (octet == 250) {
+                // QUERY SIZE OF MCP IN BUFFER
+                uint size = McpBuf.NumBytesBuffered();
+                printf("[%d]  %d: querying size => %d from MCP buffered\n", count, octet, size);
+
+                dma_buffer[0] = (byte)(size >> 8);
+                dma_buffer[1] = (byte)(size >> 0);
+                StartDmaTx(channel, config, 2);
+
+            } else if (octet == 251) {
+                // PUSH num_bytes_to_mcp TO MCP.
+                printf("[%d]  %d: Going to push %d bytes to MCP\n", count, octet, num_bytes_to_mcp);
+
+                if (!(1 <= num_bytes_to_mcp && num_bytes_to_mcp <= 100)) {
+                    printf("Got octet %d (PUSH) but num_bytes_to_mcp is %d\n", octet, num_bytes_to_mcp);
+                    Panic();
+                }
+
+                for (uint i = 0; i < num_bytes_to_mcp; i++) {
+                    printf(" %dp%d ", i, dma_buffer[i]);
+                }
+                printf("\n");
+
+                // First byte of the group is 128 plus the size of the payload.
+                // Followed by that many payload bytes.
+                putbyte(128 + num_bytes_to_mcp);
+                // Now send that many data bytes.
+                for (uint i = 0; i < num_bytes_to_mcp; i++) {
+                    putbyte(dma_buffer[i]);
+                }
+                num_bytes_to_mcp = 0;
+
+            } else if (octet == 252) {
+                // Bonobo Presence Query
+                printf("\n[%d] Probe 252->'b'\n", count);
+                status_reply = 'b';  // A special answer.
+            } else {
+                printf("\n[%d] Panic: bad command byte %d\n", count, octet);
+                Panic();
+            }
+
+printf("A<%d.%d>", pio_sm_is_tx_fifo_empty(pio1, sm1), pio_sm_is_tx_fifo_full(pio1, sm1));
+            PUT(pio1, sm1, 241);  // Try a junk first.
+printf("B<%d.%d>", pio_sm_is_tx_fifo_empty(pio1, sm1), pio_sm_is_tx_fifo_full(pio1, sm1));
+            PUT(pio1, sm1, status_reply);  // Status is now 1: Ready.
+printf("C<%d.%d>", pio_sm_is_tx_fifo_empty(pio1, sm1), pio_sm_is_tx_fifo_full(pio1, sm1));
+            PUT(pio1, sm1, 244);  // Try a junk first.
+printf("D<%d.%d>", pio_sm_is_tx_fifo_empty(pio1, sm1), pio_sm_is_tx_fifo_full(pio1, sm1));
+
+            printf("\n[%d] status_reply WAS %d.\n", count, status_reply);
+
+#if 0
+// Manual WAIT_GET instead of DMA; see above #if [01]
+            if (101 <= octet && octet <= 200) {
+                uint n = octet-100;
+                for (uint i = 0; i < n; i++) {
+                    widebuf[i] = WAIT_GET(pio1, sm3);
+                }
+                printf("GOT:\n");
+                for (uint i = 0; i < n; i++) {
+                    printf("[%d]$%x ", i, widebuf[i]);
+                }
+                printf("\n");
+                for (uint i = 0; i < n; i++) {
+                    dma_buffer[i] = (byte)widebuf[i];
+                }
+            }
+#endif
+
+            LED(lit);
+            lit = !lit;
+            count++;
+        }
+      }
+}
+
 int main() {
   OutPin(16, 1); // direction
   OutPin(17, 1); // halt
@@ -226,144 +413,28 @@ int main() {
 
   InitialBlinks();
 
-  extern void spoonfeed();
-  spoonfeed();
-
-  StartPio1();
-
   int channel = dma_claim_unused_channel(/*required*/true);
   dma_channel_config config = dma_channel_get_default_config(channel);
 
-  int lit = 0;
-  int count = 0;
-  uint num_bytes_to_mcp = 0;
-
   while (true) {
-    ////////////// From MCP
-    // Attempt to get a byte from the MCP.
-    // If we get one, add it to the McpBuf.
-    byte octet;
-    if (getbyte(&octet)) {
-        McpBuf.Put(octet);
-    }
+      extern void spoonfeed();
+      spoonfeed();
 
-    ////////////// From COCO
-    constexpr uint sm0 = 0, sm1 = 1, sm2 = 2, sm3 = 3;
+      StartPio1();
 
-    if (TryGetFromFifo(pio1, sm0, &octet)) {
-
-        byte status_reply = 1;  // the default
-        if (1 <= octet && octet <= 100) {
-            // COCO READS n BYTES FROM MCP.
-            uint n = octet;
-            printf("[%d]  %d: coco reads %d bytes\n", count, octet, n);
-
-            uint buffered = McpBuf.NumBytesBuffered();
-            if (buffered < n) {
-                printf("PANIC: wanted %d bytes from MCP, only %d buffered.\n",
-                        n, buffered);
-                Panic();
-            }
-            // GetBytesFromTether:
-            for (uint i = 0; i < n; i++) {
-                dma_buffer[i] = McpBuf.Take();
-            }
-            StartDmaTx(channel, &config, n);
-
-        } else if (101 <= octet && octet <= 200) {
-            // COCO WRITES n BYTES TO MCP.
-            uint n = octet-100;
-            printf("[%d]  %d: coco writes %d bytes for MCP\n", count, octet, n);
-
-            if (num_bytes_to_mcp != 0) {
-                printf("Got octet %d but num_bytes_to_mcp is %d and it should be zero.\n");
-                Panic();
-            }
-
-            // enable DMA
-            channel_config_set_read_increment(&config, false);
-            channel_config_set_write_increment(&config, true);
-            channel_config_set_dreq(&config,
-                                    pio_get_dreq(pio1, sm3, /*is_tx*/false));
-
-            channel_config_set_transfer_data_size(&config, DMA_SIZE_8);
-            channel_config_set_irq_quiet(&config, true);
-
-            channel_config_set_enable(&config, true);
-            dma_channel_configure(
-                channel,           // Channel to be configured
-                &config,           // The configuration we just created
-                dma_buffer,           // The initial write address
-                &pio1->rxf[sm2],   // The initial read address
-                n,                 // Number of transfers
-                true               // Start immediately.      
-            );
-
-            num_bytes_to_mcp = n;
-
-        } else if (octet == 250) {
-            // QUERY SIZE OF MCP IN BUFFER
-            uint size = McpBuf.NumBytesBuffered();
-            printf("[%d]  %d: querying size => %d from MCP buffered\n", count, octet, size);
-
-            dma_buffer[0] = (byte)(size >> 8);
-            dma_buffer[1] = (byte)(size >> 0);
-            StartDmaTx(channel, &config, 2);
-
-        } else if (octet == 251) {
-            // PUSH num_bytes_to_mcp TO MCP.
-            printf("[%d]  %d: Going to push %d bytes to MCP\n", count, octet, num_bytes_to_mcp);
-
-            // Send an initial marker 129 to 138, telling how many bytes are coming.
-            if (!(1 <= num_bytes_to_mcp && num_bytes_to_mcp <= 100)) {
-                printf("Got octet %d (PUSH) but num_bytes_to_mcp is %d\n", octet, num_bytes_to_mcp);
-                Panic();
-            }
-            putbyte(128 + num_bytes_to_mcp);
-
-            // Now send that many data bytes.
-            for (uint i = 0; i < num_bytes_to_mcp; i++) {
-                putbyte(dma_buffer[i]);
-            }
-            num_bytes_to_mcp = 0;
-
-        } else if (octet == 252) {
-            // Bonobo Presence Query
-            status_reply = 'b';  // A special answer.
-        } else {
-            printf("[%d] Panic: bad command byte %d\n", count, octet);
-            Panic();
-        }
-
-        PUT(pio1, sm1, status_reply);  // Status is now 1: Ready.
-
-        LED(lit);
-        lit = !lit;
-        count++;
-    }
+      Operate(channel, &config);
   }
 }
 
-#define G_CART   6
-#define G_NMI    7
-#define G_DIR   16
-#define G_HALT  17
-#define G_SLENB 18
-#define G_SPOON 19
-#define G_RESET 20
-#define G_ECLK  21
-
 void spoonfeed() {
-  constexpr uint sm0 = 0, sm1 = 1, sm2 = 2, sm3 = 3;
-
-  while (true) {
+    constexpr uint sm0 = 0, sm1 = 1, sm2 = 2, sm3 = 3;
 
     bool reset;
     do {
         // wait for RESET to activate
         reset = gpio_get(G_RESET);
     } while (reset == true);
-    printf(" Got reset. ");
+    printf("spoonfeed: Got reset.\n");
 
     gpio_put(G_HALT, 0);   // Activate HALT
     gpio_put(G_SPOON, 0);  // Activate SPOON
@@ -408,7 +479,9 @@ void spoonfeed() {
     pio_sm_claim(pio0, sm1);
     const uint offset1 = pio_add_program(pio0, &spoon_pio_program);
     spoon_program_init(pio0, sm1, offset1);
+#if 1
 
+    // COCO3 version, works with 6309 (SJC COCO 3B, AGS COCO3).
     const unsigned short* start1 = COCO3_INIT_DATA;
     const unsigned short* limit1 = (const unsigned short*)(
          (char*)COCO3_INIT_DATA + sizeof COCO3_INIT_DATA);
@@ -426,6 +499,22 @@ void spoonfeed() {
         sleep_us(20);                         // long enough.
         pio_sm_set_enabled(pio0, sm1, false);  // Stop.
     }
+#else
+
+    // COCO2 version -- did not work.
+    for (uint _addr = 0xFFC0; _addr < 0xFFE0; _addr += 2) {
+        uint _byte = 42;
+        uint w1 = ((_byte&0xFF) << 24) | 0xCCFF; // CC = LDD immediate
+        uint w2 = ((_addr&0xFF) << 16) | (_addr & 0xFF00) | 0xF7; // F7 = STB extended
+        pio_sm_put(pio0, sm1, w1);
+        pio_sm_put(pio0, sm1, w2);
+
+        pio_sm_exec(pio0, sm1, offset1);       // Jump to start of spoon_pio_program
+        pio_sm_set_enabled(pio0, sm1, true);  // Run.
+        sleep_us(20);                         // long enough.
+        pio_sm_set_enabled(pio0, sm1, false);  // Stop.
+    }
+#endif
 
     const unsigned int* start2 = PairsOfWords;
     const unsigned int* limit2 = (const unsigned int*)(
@@ -452,5 +541,4 @@ void spoonfeed() {
     OutPin(17, 1); // halt
     OutPin(18, 1); // slenb
 
- } // while
 }  // spoonfeed
