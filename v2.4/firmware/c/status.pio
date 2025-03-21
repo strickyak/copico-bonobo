@@ -30,12 +30,13 @@
 void status_pio_init(PIO pio, uint sm, uint offset) {
 
    pio_sm_config cf = status_pio_program_get_default_config(offset);
-   sm_config_set_out_pins(&cf, /*base*/8, /*count*/8);
    sm_config_set_clkdiv(&cf, 1);  // CLOCK DIVISOR
 
+   // SIDE:
    sm_config_set_sideset_pin_base(&cf, 16);  // Pin 16 == Direction.
 
-   // OUT: Shift to right, don't autopull.
+   // OUT:
+   sm_config_set_out_pins(&cf, /*base*/8, /*count*/8);
    const bool OUT_SHIFT_RIGHT = true;
    const bool AUTOPULL = false;
    const uint PULL_THRESHOLD = 8; // unused.

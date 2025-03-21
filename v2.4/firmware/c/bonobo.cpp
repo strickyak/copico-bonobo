@@ -145,9 +145,6 @@ class CircBuf {
 };
 CircBuf<20000> McpBuf;
 
-constexpr uint DIRECTION_IN = false;
-constexpr uint DIRECTION_OUT = true;
-
 void StopPortals(PIO pio) {
   constexpr uint smC = 0, smS = 1, smR = 2,
                  smW = 3;  // control, status, read, & write.
@@ -169,46 +166,25 @@ void StartPortals(PIO pio) {
   constexpr uint smC = 0, smS = 1, smR = 2,
                  smW = 3;  // control, status, read, & write.
 
-  pio_clear_instruction_memory(pio);
-
   pio_sm_restart(pio, smC);
   pio_sm_restart(pio, smS);
   pio_sm_restart(pio, smR);
   pio_sm_restart(pio, smW);
+  pio_clear_instruction_memory(pio);
 
-  // Because PIO writes to GPIO 8-15 and sideset writes to 16.
-  for (uint pin = 8; pin < 16; pin++) {
-    pio_gpio_init(pio, pin);
-    gpio_set_dir(GPIO_IN, pin);
-  }
-  pio_gpio_init(pio, G_DIR);
-  gpio_set_dir(GPIO_OUT, G_DIR);
-
-  pio_sm_set_consecutive_pindirs(pio, smC, /*base*/ G_WC, /*count*/ 1,
-                                 DIRECTION_IN);
-  pio_sm_claim(pio, smC);
   const uint offsetC = pio_add_program(pio, &control_pio_program);
   control_pio_init(pio, smC, offsetC);
 
-  pio_sm_set_consecutive_pindirs(pio, smS, /*base*/ G_RC, /*count*/ 1,
-                                 DIRECTION_IN);
-  pio_sm_claim(pio, smS);
   const uint offsetS = pio_add_program(pio, &status_pio_program);
   status_pio_init(pio, smS, offsetS);
 
-  pio_sm_set_consecutive_pindirs(pio, smR, /*base*/ G_RD, /*count*/ 1,
-                                 DIRECTION_IN);
-  pio_sm_claim(pio, smR);
   const uint offsetR = pio_add_program(pio, &read_pio_program);
   read_pio_init(pio, smR, offsetR);
 
-  pio_sm_set_consecutive_pindirs(pio, smW, /*base*/ G_WD, /*count*/ 1,
-                                 DIRECTION_IN);
-  pio_sm_claim(pio, smW);
   const uint offsetW = pio_add_program(pio, &write_pio_program);
   write_pio_init(pio, smW, offsetW);
 
-  printf("PIO prog offsets: %d, %d, %d, %d\n", offsetC, offsetS, offsetR,
+  printf("Portal prog offsets: %d, %d, %d, %d\n", offsetC, offsetS, offsetR,
          offsetW);
 }
 
@@ -267,14 +243,47 @@ void StartDmaTx(PIO pio, int sm, int channel, dma_channel_config* config,
   );
 }
 
+void StartDmaRx(PIO pio, int sm, int channel, dma_channel_config* config,
+                uint size) {
+        // enable DMA: coco writes become Rx inputs, get copied to dma_buffer.
+        channel_config_set_read_increment(config, false);
+        channel_config_set_write_increment(config, true);
+        channel_config_set_dreq(config,
+                                pio_get_dreq(pio, sm, /*is_tx*/ false));
+
+        channel_config_set_transfer_data_size(config, DMA_SIZE_8);
+        channel_config_set_irq_quiet(config, true);
+
+        channel_config_set_enable(config, true);
+
+        auto rxfifo = &pio->rxf[sm];
+
+        dma_channel_configure(channel,     // Channel to be configured
+                              config,      // The configuration we just created
+                              dma_buffer,  // The initial write address
+                              rxfifo,      // The initial read address
+                              size,           // Number of transfers
+                              true         // Start immediately.
+        );
+}
+
 void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
   constexpr uint smC = 0, smS = 1, smR = 2,
                  smW = 3;  // control, status, read, & write.
-  int lit = 0;
+  // int lit = 0;
   int count = 0;
   uint num_bytes_to_mcp = 0;
 
+  pio_sm_set_enabled(pio, smC, true);
+  pio_sm_set_enabled(pio, smS, true);
+  pio_sm_set_enabled(pio, smR, true);
+  pio_sm_set_enabled(pio, smW, true);
+
   while (true) {
+    LED(false);
+    // sleep_ms(100);
+    // printf("$");
+
     bool reset = gpio_get(G_RESET);
     if (reset == false) {  // Active Low
       printf("\nOperate got RESET\n");
@@ -292,8 +301,9 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
     }
     ////////////// From COCO
 
-    if (TryFifoGet(pio1, smC, &octet)) {  // octet <- byte via Control Write
+    if (TryFifoGet(pio, smC, &octet)) {  // octet <- byte via Control Write
       byte status_reply = 1;              // the default reply, if not changed.
+      LED(true);
 
       if (1 <= octet && octet <= 100) {
         // COCO READS n BYTES FROM MCP.
@@ -329,18 +339,21 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
           Panic();
         }
 
+        StartDmaRx(pio, smR, channel, config, n);
+
+#if 0
         // enable DMA: coco writes become Rx inputs, get copied to dma_buffer.
         channel_config_set_read_increment(config, false);
         channel_config_set_write_increment(config, true);
         channel_config_set_dreq(config,
-                                pio_get_dreq(pio1, smW, /*is_tx*/ false));
+                                pio_get_dreq(pio, smW, /*is_tx*/ false));
 
         channel_config_set_transfer_data_size(config, DMA_SIZE_8);
         channel_config_set_irq_quiet(config, true);
 
         channel_config_set_enable(config, true);
 
-        auto rxfifo = &pio1->rxf[smW];
+        auto rxfifo = &pio->rxf[smW];
 
         dma_channel_configure(channel,     // Channel to be configured
                               config,      // The configuration we just created
@@ -349,6 +362,7 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
                               n,           // Number of transfers
                               true         // Start immediately.
         );
+#endif
 
         num_bytes_to_mcp = n;
 
@@ -394,19 +408,24 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
       } else {
         printf("\n[%d] Panic: bad command byte %d\n", count, octet);
         Panic();
-      }
+      } // what octet
 
-      FifoPut(pio1, smS, 241);           // Try a junk first.
-      FifoPut(pio1, smS, status_reply);  // Status is now 1: Ready.
-      FifoPut(pio1, smS, 244);           // Try a junk first.
+      FifoPut(pio, smS, 241);           // Try a junk first.
+      FifoPut(pio, smS, status_reply);  // Status is now 1: Ready.
+      FifoPut(pio, smS, 244);           // Try a junk first.
 
       printf("[%d] -> %d.\n", count, status_reply);
 
-      LED(lit);
-      lit = !lit;
+      // LED(lit);
+      // lit = !lit;
       count++;
-    }
+    } // if Try Fifo -> octet
   }
+
+  pio_sm_set_enabled(pio, smC, false);
+  pio_sm_set_enabled(pio, smS, false);
+  pio_sm_set_enabled(pio, smR, false);
+  pio_sm_set_enabled(pio, smW, false);
 }
 
 void SpoonFeed(PIO pio) {
@@ -565,10 +584,10 @@ int main() {
   while (true) {
     SpoonFeed(pio);
 
-#if 0
-    StartPortals(pio1);
-    OperatePortals(pio1, channel, &config);
-    StopPortals(pio1);
+#if 1
+    StartPortals(pio);
+    OperatePortals(pio, channel, &config);
+    StopPortals(pio);
 #endif
   }
 }  // main
