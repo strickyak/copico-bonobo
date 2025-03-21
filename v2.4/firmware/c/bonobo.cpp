@@ -26,8 +26,8 @@
 
 // outputs:
 #define G_DIR 16    // data bus direction. 0=toCoco 1=toPico
-#define G_HALT 17   // only effective is SPOON=0
-#define G_SLENB 18  // only effective is SPOON=0
+#define G_HALT 17   // only effective if SPOON=0
+#define G_SLENB 18  // only effective if SPOON=0
 #define G_SPOON 19  // 0=drives CART, NMI, HALT, and SLENB to coco
 
 // inputs:
@@ -53,17 +53,18 @@ typedef unsigned int word;
 
 #include "_nekot1.decb.h"
 #include "bootdata.h"
-
-#include "control.pio.h"
-#include "on_reset.pio.h"
-#include "read.pio.h"
+//
 #include "spoon.pio.h"
+#include "vector.pio.h"
+//
+#include "control.pio.h"
+#include "read.pio.h"
 #include "status.pio.h"
 #include "write.pio.h"
 
 // For USB Serial: PutByte & TryGetByte.
 
-void putbyte(byte x) { putchar_raw(x); }
+void PutByte(byte x) { putchar_raw(x); }
 
 bool TryGetByte(byte* ptr) {
   int rc = stdio_usb_in_chars((char*)ptr, 1);
@@ -72,14 +73,14 @@ bool TryGetByte(byte* ptr) {
 
 // For GPIO in main core.
 
-void InPin(int p) {
-  gpio_init(p);
-  gpio_set_dir(p, GPIO_IN);
+void InPin(int pin) {
+  gpio_init(pin);
+  gpio_set_dir(pin, GPIO_IN);
 }
-void OutPin(int p, uint value) {
-  gpio_init(p);
-  gpio_set_dir(p, GPIO_OUT);
-  gpio_put(p, value);
+void OutPin(int pin, uint value) {
+  gpio_init(pin);
+  gpio_set_dir(pin, GPIO_OUT);
+  gpio_put(pin, value);
 }
 
 // LED for fun
@@ -144,33 +145,71 @@ class CircBuf {
 };
 CircBuf<20000> McpBuf;
 
-void StartPio1() {
-  constexpr uint sm0 = 0, sm1 = 1, sm2 = 2, sm3 = 3;
+constexpr uint DIRECTION_IN = false;
+constexpr uint DIRECTION_OUT = true;
 
-  pio_clear_instruction_memory(pio1);
-  pio_sm_restart(pio1, sm0);
-  pio_sm_restart(pio1, sm1);
-  pio_sm_restart(pio1, sm2);
-  pio_sm_restart(pio1, sm3);
+void StopPortals(PIO pio) {
+  constexpr uint smC = 0, smS = 1, smR = 2,
+                 smW = 3;  // control, status, read, & write.
 
-  pio_sm_claim(pio1, sm0);
-  const uint offset0 = pio_add_program(pio1, &control_pio_program);
-  control_pio_init(pio1, sm0, offset0);
+  pio_sm_set_enabled(pio, smC, false);
+  pio_sm_set_enabled(pio, smS, false);
+  pio_sm_set_enabled(pio, smR, false);
+  pio_sm_set_enabled(pio, smW, false);
 
-  pio_sm_claim(pio1, sm1);
-  const uint offset1 = pio_add_program(pio1, &status_pio_program);
-  status_pio_init(pio1, sm1, offset1);
+  pio_clear_instruction_memory(pio);
 
-  pio_sm_claim(pio1, sm2);
-  const uint offset2 = pio_add_program(pio1, &read_pio_program);
-  read_pio_init(pio1, sm2, offset2);
+  pio_sm_restart(pio, smC);
+  pio_sm_restart(pio, smS);
+  pio_sm_restart(pio, smR);
+  pio_sm_restart(pio, smW);
+}
 
-  pio_sm_claim(pio1, sm3);
-  const uint offset3 = pio_add_program(pio1, &write_pio_program);
-  write_pio_init(pio1, sm3, offset3);
+void StartPortals(PIO pio) {
+  constexpr uint smC = 0, smS = 1, smR = 2,
+                 smW = 3;  // control, status, read, & write.
 
-  printf("PIO prog offsets: %d, %d, %d, %d\n", offset0, offset1, offset2,
-         offset3);
+  pio_clear_instruction_memory(pio);
+
+  pio_sm_restart(pio, smC);
+  pio_sm_restart(pio, smS);
+  pio_sm_restart(pio, smR);
+  pio_sm_restart(pio, smW);
+
+  // Because PIO writes to GPIO 8-15 and sideset writes to 16.
+  for (uint pin = 8; pin < 16; pin++) {
+    pio_gpio_init(pio, pin);
+    gpio_set_dir(GPIO_IN, pin);
+  }
+  pio_gpio_init(pio, G_DIR);
+  gpio_set_dir(GPIO_OUT, G_DIR);
+
+  pio_sm_set_consecutive_pindirs(pio, smC, /*base*/ G_WC, /*count*/ 1,
+                                 DIRECTION_IN);
+  pio_sm_claim(pio, smC);
+  const uint offsetC = pio_add_program(pio, &control_pio_program);
+  control_pio_init(pio, smC, offsetC);
+
+  pio_sm_set_consecutive_pindirs(pio, smS, /*base*/ G_RC, /*count*/ 1,
+                                 DIRECTION_IN);
+  pio_sm_claim(pio, smS);
+  const uint offsetS = pio_add_program(pio, &status_pio_program);
+  status_pio_init(pio, smS, offsetS);
+
+  pio_sm_set_consecutive_pindirs(pio, smR, /*base*/ G_RD, /*count*/ 1,
+                                 DIRECTION_IN);
+  pio_sm_claim(pio, smR);
+  const uint offsetR = pio_add_program(pio, &read_pio_program);
+  read_pio_init(pio, smR, offsetR);
+
+  pio_sm_set_consecutive_pindirs(pio, smW, /*base*/ G_WD, /*count*/ 1,
+                                 DIRECTION_IN);
+  pio_sm_claim(pio, smW);
+  const uint offsetW = pio_add_program(pio, &write_pio_program);
+  write_pio_init(pio, smW, offsetW);
+
+  printf("PIO prog offsets: %d, %d, %d, %d\n", offsetC, offsetS, offsetR,
+         offsetW);
 }
 
 void Panic() {
@@ -204,34 +243,33 @@ constexpr uint HACK =
 byte bigger[256 + HACK];
 #define dma_buffer (bigger + HACK)
 
-void StartDmaTx(int channel, dma_channel_config* config, uint size) {
-#if 0
-  constexpr uint sm2 = 2;
-
-  // enable DMA
+void StartDmaTx(PIO pio, int sm, int channel, dma_channel_config* config,
+                uint size) {
   channel_config_set_read_increment(config, true);
   channel_config_set_write_increment(config, false);
-  channel_config_set_dreq(config, pio_get_dreq(pio1, sm2, /*is_tx*/ true));
+  channel_config_set_dreq(config, pio_get_dreq(pio, sm, /*is_tx*/ true));
 
   channel_config_set_transfer_data_size(config, DMA_SIZE_8);
   channel_config_set_irq_quiet(config, true);
 
   channel_config_set_enable(config, true);
 
+  auto txfifo = &pio->txf[sm];
+
   dma_channel_configure(
-      channel,          // Channel to be configured
-      config,           // The configuration we just created
-      &pio1->txf[sm2],  // The initial write address
+      channel,  // Channel to be configured
+      config,   // The configuration we just created
+      txfifo,   // The initial write address
       dma_buffer -
           HACK,     // The initial read address ([HACK] with 1 waste at front)
       size + HACK,  // Number of transfers, [HACK] counting 1 waste at back.
       true          // Start immediately.
   );
-#endif
 }
 
-void Operate(int channel, dma_channel_config* config) {
-#if 0
+void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
+  constexpr uint smC = 0, smS = 1, smR = 2,
+                 smW = 3;  // control, status, read, & write.
   int lit = 0;
   int count = 0;
   uint num_bytes_to_mcp = 0;
@@ -253,10 +291,10 @@ void Operate(int channel, dma_channel_config* config) {
 #endif
     }
     ////////////// From COCO
-    constexpr uint sm0 = 0, sm1 = 1, sm2 = 2, sm3 = 3;
 
-    if (TryFifoGet(pio1, sm0, &octet)) {
-      byte status_reply = 1;  // the default
+    if (TryFifoGet(pio1, smC, &octet)) {  // octet <- byte via Control Write
+      byte status_reply = 1;              // the default reply, if not changed.
+
       if (1 <= octet && octet <= 100) {
         // COCO READS n BYTES FROM MCP.
         uint n = octet;
@@ -275,7 +313,7 @@ void Operate(int channel, dma_channel_config* config) {
           printf(" %dg%d ", i, dma_buffer[i]);
         }
         printf("\n");
-        StartDmaTx(channel, config, n);
+        StartDmaTx(pio, smR, channel, config, n);
 
       } else if (101 <= octet && octet <= 200) {
         // COCO WRITES n BYTES TO MCP.
@@ -291,21 +329,18 @@ void Operate(int channel, dma_channel_config* config) {
           Panic();
         }
 
-        // X// for (uint i = 8; i < 16; i++) InPin(i);
-
-        // enable DMA
+        // enable DMA: coco writes become Rx inputs, get copied to dma_buffer.
         channel_config_set_read_increment(config, false);
         channel_config_set_write_increment(config, true);
         channel_config_set_dreq(config,
-                                pio_get_dreq(pio1, sm3, /*is_tx*/ false));
+                                pio_get_dreq(pio1, smW, /*is_tx*/ false));
 
         channel_config_set_transfer_data_size(config, DMA_SIZE_8);
         channel_config_set_irq_quiet(config, true);
 
         channel_config_set_enable(config, true);
 
-        // X// io_rw_8 *rxfifo = (io_rw_8 *) &pio1->rxf[sm3];
-        auto rxfifo = &pio1->rxf[sm3];
+        auto rxfifo = &pio1->rxf[smW];
 
         dma_channel_configure(channel,     // Channel to be configured
                               config,      // The configuration we just created
@@ -325,7 +360,7 @@ void Operate(int channel, dma_channel_config* config) {
 
         dma_buffer[0] = (byte)(size >> 8);
         dma_buffer[1] = (byte)(size >> 0);
-        StartDmaTx(channel, config, 2);
+        StartDmaTx(pio, smR, channel, config, 2);
 
       } else if (octet == 251) {
         // PUSH num_bytes_to_mcp TO MCP.
@@ -361,17 +396,9 @@ void Operate(int channel, dma_channel_config* config) {
         Panic();
       }
 
-      // printf("A<%d.%d>", pio_sm_is_tx_fifo_empty(pio1, sm1),
-             // pio_sm_is_tx_fifo_full(pio1, sm1));
-      FifoPut(pio1, sm1, 241);  // Try a junk first.
-      // printf("B<%d.%d>", pio_sm_is_tx_fifo_empty(pio1, sm1),
-             // pio_sm_is_tx_fifo_full(pio1, sm1));
-      FifoPut(pio1, sm1, status_reply);  // Status is now 1: Ready.
-      // printf("C<%d.%d>", pio_sm_is_tx_fifo_empty(pio1, sm1),
-             // pio_sm_is_tx_fifo_full(pio1, sm1));
-      FifoPut(pio1, sm1, 244);  // Try a junk first.
-      // printf("D<%d.%d>", pio_sm_is_tx_fifo_empty(pio1, sm1),
-             // pio_sm_is_tx_fifo_full(pio1, sm1));
+      FifoPut(pio1, smS, 241);           // Try a junk first.
+      FifoPut(pio1, smS, status_reply);  // Status is now 1: Ready.
+      FifoPut(pio1, smS, 244);           // Try a junk first.
 
       printf("[%d] -> %d.\n", count, status_reply);
 
@@ -380,26 +407,28 @@ void Operate(int channel, dma_channel_config* config) {
       count++;
     }
   }
-#endif
 }
 
-void SpoonFeed() {
-  // SpoonFeeding uses pio0.
-  const PIO pioSF = pio0;
-  // SpoonFeeding needs two State Machines:
-  //   0.  smR (for two-byte reset vector) 
-  //   1.  smF (for six-fetch opcode feeding)
-  constexpr uint smR = 0, smF = 1, sm2 = 2, sm3 = 3;
+void SpoonFeed(PIO pio) {
+  constexpr uint sm = 0;  // Only uses sm0.
 
   bool reset;
+  bool led = false;
   do {
+    led = !led;
+    LED(led);      // toggle the LED
+    sleep_ms(50);  // every 50 ms
+
     // wait for RESET to activate
     reset = gpio_get(G_RESET);
   } while (reset == true);
   printf("SpoonFeed: Got reset.\n");
 
-  gpio_put(G_HALT, 0);   // Activate HALT
-  gpio_put(G_SPOON, 0);  // Activate SPOON
+  // void pio_sm_set_pins_with_mask (PIO pio, uint sm, uint32_t pin_values,
+  // uint32_t pin_mask) Lower HALT and SPOON to 0.
+  pio_sm_set_pins_with_mask(pio, sm, /*values*/ 0x5u << 16,
+                            /*mask*/ 0xFu << 16);
+
   sleep_ms(100);
   printf(" Debounced. ");
 
@@ -413,50 +442,27 @@ void SpoonFeed() {
   sleep_ms(400);  // Time for other hardware to reset.
   printf(" Slept.\n");
 
-  pio_clear_instruction_memory(pioSF);
-  pio_sm_restart(pioSF, smR);
-  pio_sm_restart(pioSF, smF);
-  pio_sm_restart(pioSF, sm2);
-  pio_sm_restart(pioSF, sm3);
-
   ///////////////////////////////
   //
-  //  smR  (for reset vectors)
+  //  Spoon feed Reset Vector.
 
-  // Now these are under PIO control with smR.
-  pio_sm_set_consecutive_pindirs(pioSF, smR, 8, 8, false/*in*/);  // data bus
-  pio_sm_set_consecutive_pindirs(pioSF, smR, 16, 4, true/*out*/); // spoon control
-  pio_sm_set_consecutive_pindirs(pioSF, smR, 20, 2, false/*in*/); // reset, Eclk
-  for (uint i = 8; i < 20; i++) {
-    pio_gpio_init(pioSF, i);
-  }
-
-  pio_sm_claim(pioSF, smR);
-  const uint offsetR = pio_add_program(pioSF, &onreset_pio_program);
-  onreset_program_init(pioSF, smR, offsetR);
+  pio_clear_instruction_memory(pio);
+  const uint offsetVectorProgram = pio_add_program(pio, &vector_pio_program);
+  vector_program_init(pio, sm, offsetVectorProgram);
 
   // FF=outputs $8888=reset_vector 00=inputs
-  pio_sm_put(pioSF, smR, 0x008888FF);
-  pio_sm_set_enabled(pioSF, smR, true);   // Run.
-  sleep_ms(1);                           // long enough.
-  pio_sm_set_enabled(pioSF, smR, false);  // Stop.
-  pio_remove_program_and_unclaim_sm(&onreset_pio_program, pioSF, smR, offsetR);
+  pio_sm_put(pio, sm, 0x008888FF);
+  pio_sm_set_enabled(pio, sm, true);   // Run.
+  sleep_us(20);                        // long enough.
+  pio_sm_set_enabled(pio, sm, false);  // Stop.
 
   ///////////////////////////////
   //
   //  smF  (for six-byte fetch sequences)
 
-  // Now these are under PIO control with smF.
-  pio_sm_set_consecutive_pindirs(pioSF, smF, 8, 8, false/*in*/);  // data bus
-  pio_sm_set_consecutive_pindirs(pioSF, smF, 16, 4, true/*out*/); // spoon control
-  pio_sm_set_consecutive_pindirs(pioSF, smF, 20, 2, false/*in*/); // reset, Eclk
-  for (uint i = 8; i < 20; i++) {
-    pio_gpio_init(pioSF, i);
-  }
-
-  pio_sm_claim(pioSF, smF);
-  const uint offsetF = pio_add_program(pioSF, &spoon_pio_program);
-  spoon_program_init(pioSF, smF, offsetF);
+  pio_clear_instruction_memory(pio);
+  const uint offsetSpoonProgram = pio_add_program(pio, &spoon_pio_program);
+  spoon_program_init(pio, sm, offsetSpoonProgram);
 
   // TODO: fix the data to work on COCO1 & 2.
   const unsigned short* startF = COCO3_INIT_DATA;
@@ -469,88 +475,111 @@ void SpoonFeed() {
     uint w1 = ((value & 0xFF) << 24) | 0xCCFF;  // CC = LDD immediate
     uint w2 =
         ((addr & 0xFF) << 16) | (addr & 0xFF00) | 0xF7;  // F7 = STB extended
-    pio_sm_put(pioSF, smF, w1);
-    pio_sm_put(pioSF, smF, w2);
+    pio_sm_put(pio, sm, w1);
+    pio_sm_put(pio, sm, w2);
 
-    pio_sm_exec(pioSF, smF, offsetF);       // Jump to start of spoon_pio_program
-    pio_sm_set_enabled(pioSF, smF, true);   // Run.
-    sleep_us(20);                          // long enough for unhalting & two instructions.
-    pio_sm_set_enabled(pioSF, smF, false);  // Stop.
+    pio_sm_exec(pio, sm,
+                offsetSpoonProgram);    // Jump to start of spoon_pio_program
+    pio_sm_set_enabled(pio, sm, true);  // Run.
+    sleep_us(20);  // long enough for unhalting & two instructions.
+    pio_sm_set_enabled(pio, sm, false);  // Stop.
   }
 
-  // The big table PairsOfWords contains pairs of words (representing two opcodes each)
-  // premade ready for shoving into the FIFO of smF with pio_sm_put.
+  // The big table PairsOfWords contains pairs of words (representing two
+  // opcodes each) premade ready for shoving into the FIFO of sm with
+  // pio_sm_put.
   const unsigned int* start2 = PairsOfWords;
   const unsigned int* limit2 =
       (const unsigned int*)((char*)PairsOfWords + sizeof PairsOfWords);
 
   for (const unsigned int* p = start2; p < limit2; p += 2) {
-    pio_sm_put(pioSF, smF, p[0]);
-    pio_sm_put(pioSF, smF, p[1]);
+    pio_sm_put(pio, sm, p[0]);
+    pio_sm_put(pio, sm, p[1]);
 
-    pio_sm_exec(pioSF, smF, offsetF);       // Jump to start of spoon_pio_program
-    pio_sm_set_enabled(pioSF, smF, true);   // Run.
-    sleep_us(20);                           // long enough for unhalting & two instructions.
-    pio_sm_set_enabled(pioSF, smF, false);  // Stop.
+    pio_sm_exec(pio, sm,
+                offsetSpoonProgram);    // Jump to start of spoon_pio_program
+    pio_sm_set_enabled(pio, sm, true);  // Run.
+    sleep_us(20);  // long enough for unhalting & two instructions.
+    pio_sm_set_enabled(pio, sm, false);  // Stop.
   }
 
-  pio_remove_program_and_unclaim_sm(&spoon_pio_program, pioSF, smF, offsetF);
+  // void pio_sm_set_pins_with_mask (PIO pio, uint sm, uint32_t pin_values,
+  // uint32_t pin_mask) Raise HALT and SPOON to 1.
+  pio_sm_set_pins_with_mask(pio, sm, /*values*/ 0xFu << 16,
+                            /*mask*/ 0xFu << 16);
 
-  ////////////////////////////////////
-  //
-  //  Exiting spoonfeed,
-
-  // changing those side_set outputs to control by GPIO,
-  // and set all of these pins high (inactive),
-  OutPin(G_DIR, 1);
-  OutPin(G_HALT, 1);
-  OutPin(G_SLENB, 1);
-  OutPin(G_SPOON, 1);
 }  // SpoonFeed
 
-// Define an initial direction to everything,
-// claiming them as "gpio" controlled,
-// even if we will change some of these later.
-void InitialGpioDirections() {
-  OutPin(G_CART, 1);
-  OutPin(G_NMI, 1);
-  for (uint i = G_D_BEGIN; i < G_D_LIMIT; i++) InPin(i);  // Data bus.
-  OutPin(G_SPOON, 1);  // spoon
-  OutPin(G_DIR, 1);    // direction
-  OutPin(G_HALT, 1);   // halt
-  OutPin(G_SLENB, 1);  // slenb
+void InitializePins(PIO pio) {
+  constexpr bool IN = false;  // pin directions
+  constexpr bool OUT = true;
+  uint sm = 0;
+  pio_sm_restart(pio, sm);
 
-  OutPin(G_LED, 1);
-
-  for (uint i = 0; i < G_CART; i++) InPin(i);  // Unused.
-
+  // Always inputs: GPIO can own them.
   InPin(G_RESET);  // reset
   InPin(G_ECLK);   // E clock
   InPin(G_WC);     // Write Control
   InPin(G_RC);     // Read Control == Status
   InPin(G_WD);     // Write Data
   InPin(G_RD);     // Read Data
+
+  // GPIO Outputs.  Not used by PIO.
+  OutPin(G_LED, 1);
+  OutPin(G_CART, 1);
+  OutPin(G_NMI, 1);
+
+  // Owned by PIO: Data Bus.
+  for (uint pin = 8; pin < 16; pin++) {
+    pio_gpio_init(pio, pin);
+  }
+  pio_sm_set_consecutive_pindirs(pio, sm, /*begin*/ 8, /*size*/ 8, IN);
+
+  // Owned by PIO: Side Sets (Spoon, Dir, Halt, Slenb)
+  for (uint pin = 16; pin < 20; pin++) {
+    pio_gpio_init(pio, pin);
+  }
+
+  pio_sm_set_consecutive_pindirs(pio, sm, /*begin*/ 16, /*size*/ 4, OUT);
+
+  // Quickly HALT before Coco goes too crazy.
+  // void pio_sm_set_pins_with_mask (PIO pio, uint sm, uint32_t pin_values,
+  // uint32_t pin_mask)
+  pio_sm_set_pins_with_mask(pio, sm, 0x5u << 16, 0xFu << 16);
 }
 
 int main() {
-  InitialGpioDirections();
+  const PIO pio = pio0;  // Only use pio0.
+
+  InitializePins(pio);
 
   stdio_usb_init();
   printf("*** HELLO BONOBO\n");
   for (uint i = 0; i < 256; i++) dma_buffer[i] = (byte)(i ^ 8);
 
-  InitialBlinks();
-  // Putting StartPio1 here kills Probe later .... // StartPio1();
+  // InitialBlinks(); // 3 second delay; 3 blinks.
 
   int channel = dma_claim_unused_channel(/*required*/ true);
   dma_channel_config config = dma_channel_get_default_config(channel);
 
   while (true) {
-    SpoonFeed();
+    SpoonFeed(pio);
 
 #if 0
-    StartPio1();
-    Operate(channel, &config);
+    StartPortals(pio1);
+    OperatePortals(pio1, channel, &config);
+    StopPortals(pio1);
 #endif
   }
 }  // main
+
+// Hints:
+// pio_sm_set_pins_with_mask
+// pio_sm_set_pins_with_mask
+// pio_sm_set_consecutive_pindirs
+// gpio_set_dir_all_bits
+// gpio_put_masked
+// gpio_put
+// gpio_init
+// gpio_init_mask
+// gpio_pull_up

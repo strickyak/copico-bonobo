@@ -31,21 +31,20 @@ loop_forever:
 % c-sdk {
 
 void vector_program_init(PIO pio, uint sm, uint offset) {
-   //
-   //  pico-examples/pio/hub75/hub75.pio shows order of inits.
-   //
 
    pio_sm_config cf = vector_pio_program_get_default_config(offset);
-   sm_config_set_out_pins(&cf, G_D_BEGIN, G_D_SIZE);
-   sm_config_set_sideset_pins(&cf, G_DIR); // then G_HALT, G_SLENB, and G_SPOON.
    sm_config_set_clkdiv(&cf, /*CLOCK_DIVISOR*/ 1);
 
-   // OUT: Shift to right.  Do AUTOPULL with threshold 32.
+   // OUT:
    const bool OUT_SHIFT_RIGHT = true;
    const bool AUTOPULL = true;
    const uint PULL_THRESHOLD = 32;
    sm_config_set_out_shift(&cf, OUT_SHIFT_RIGHT, AUTOPULL, PULL_THRESHOLD);
 
+   // SIDE:
+   sm_config_set_sideset_pins(&cf, G_DIR); // then G_HALT, G_SLENB, and G_SPOON.
+
+   pio_sm_restart(pio, sm);
    pio_sm_init(pio, sm, offset, &cf);  // Apply the config.
    pio_sm_exec(pio, sm, offset);       // Reset PC, but don't run yet.
 }
