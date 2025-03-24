@@ -368,8 +368,8 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
       } else if (octet == 250) {
         // QUERY SIZE OF MCP IN BUFFER
         uint size = McpBuf.NumBytesBuffered();
-      printf("[%d]  %d: querying size => %d from MCP buffered\n", count,
-             octet, size);
+      //printf("[%d]  %d: querying size => %d from MCP buffered\n", count,
+             //octet, size);
 
         dma_buffer[0] = (byte)(size >> 8);
         dma_buffer[1] = (byte)(size >> 0);
@@ -430,7 +430,7 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
         for (uint i = 0; i < n; i++) {
             FifoWaitAndPut(pio, smR, dma_buffer[i]);
         }
-        printf("TXd %d\n", n);
+        // printf("TXd %d\n", n);
 #endif
       }
 
@@ -442,7 +442,7 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
         for (uint i = 0; i < n; i++) {
             FifoWaitAndPut(pio, smR, dma_buffer[i]);
         }
-        printf("TXd %d\n", n);
+        // printf("TXd %d\n", n);
 #endif
       }
 
@@ -461,7 +461,7 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
       }
 #endif
 
-      printf("[%d] -> %d.\n", count, status_reply);
+      // printf("[%d] -> %d.\n", count, status_reply);
 
       // LED(lit);
       // lit = !lit;
