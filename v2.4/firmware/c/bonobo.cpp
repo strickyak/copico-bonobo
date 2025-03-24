@@ -395,10 +395,10 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
           Panic();
         }
 
-        for (uint i = 0; i < num_bytes_to_mcp; i++) {
-          printf(" %dp%d ", i, dma_buffer[i]);
-        }
-        printf("\n");
+        //for (uint i = 0; i < num_bytes_to_mcp; i++) {
+          //printf(" %dp%d ", i, dma_buffer[i]);
+        //}
+        //printf("\n");
 
         // First byte of the group is 128 plus the size of the payload.
         // Followed by that many payload bytes.
