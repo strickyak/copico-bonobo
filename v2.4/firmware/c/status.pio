@@ -21,7 +21,7 @@
     out pins, 8      side 0
 
     wait 1 gpio 26           ; wait for strobe to finish -------
-    nop           [7]
+    nop           [3]
 
 .wrap
 

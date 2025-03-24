@@ -87,7 +87,7 @@ void OutPin(int pin, uint value) {
 
 void LED(bool x) { gpio_put(G_LED, x); }
 
-uint WAIT_GET(PIO pio, uint sm) {
+uint FifoWaitAndGet(PIO pio, uint sm) {
   while (pio_sm_is_rx_fifo_empty(pio, sm)) continue;
 
   return pio_sm_get(pio, sm);
@@ -103,6 +103,11 @@ bool TryFifoGet(PIO pio, uint sm, byte* octet_ptr) {
 }
 
 void FifoPut(PIO pio, uint sm, uint x) { pio_sm_put(pio, sm, x); }
+
+void FifoWaitAndPut(PIO pio, uint sm, uint x) {
+  while (pio_sm_is_tx_fifo_full(pio, sm)) continue;
+  FifoPut(pio, sm, x);
+}
 
 void InitialBlinks() {
   for (uint blink = 0; blink < 3; blink++) {
@@ -124,10 +129,20 @@ class CircBuf {
   CircBuf() : nextIn(0), nextOut(0) {}
 
   uint NumBytesBuffered() {
+#if 0
+    uint j = 8;
+    for (uint i = nextOut; i != nextIn; i=(i+1)%N) {
+        printf("/%x ", buf[i]);
+        if (j-- == 0) break;
+    }
+#endif
+    uint z;
     if (nextOut <= nextIn)
-      return nextIn - nextOut;
+      z = nextIn - nextOut;
     else
-      return nextIn + N - nextOut;
+      z = nextIn + N - nextOut;
+    // printf(" -> %04x buf\n", z);
+    return z;
   }
 
   byte Take() {
@@ -186,6 +201,11 @@ void StartPortals(PIO pio) {
 
   printf("Portal prog offsets: %d, %d, %d, %d\n", offsetC, offsetS, offsetR,
          offsetW);
+
+  pio_sm_set_enabled(pio, smC, true);
+  pio_sm_set_enabled(pio, smS, true);
+  pio_sm_set_enabled(pio, smR, true);
+  pio_sm_set_enabled(pio, smW, true);
 }
 
 void Panic() {
@@ -215,7 +235,7 @@ void Panic() {
 // so what is going on in the state machine!?
 
 constexpr uint HACK =
-    1;  // Mark where our DMA ReadToCoco is Off by One and Hacked.
+    0;  // Mark where our DMA ReadToCoco is Off by One and Hacked.
 byte bigger[256 + HACK];
 #define dma_buffer (bigger + HACK)
 
@@ -274,15 +294,7 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
   int count = 0;
   uint num_bytes_to_mcp = 0;
 
-  pio_sm_set_enabled(pio, smC, true);
-  pio_sm_set_enabled(pio, smS, true);
-  pio_sm_set_enabled(pio, smR, true);
-  pio_sm_set_enabled(pio, smW, true);
-
   while (true) {
-    LED(false);
-    // sleep_ms(100);
-    // printf("$");
 
     bool reset = gpio_get(G_RESET);
     if (reset == false) {  // Active Low
@@ -303,13 +315,12 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
 
     if (TryFifoGet(pio, smC, &octet)) {  // octet <- byte via Control Write
       byte status_reply = 1;              // the default reply, if not changed.
-      LED(true);
 
       if (1 <= octet && octet <= 100) {
         // COCO READS n BYTES FROM MCP.
         uint n = octet;
         // printf("[%d]  %d: coco reads %d bytes\n", count, octet, n);
-        printf("[%c,%c]\n", '0' + count, 'A' + octet);
+        //printf("[%c,%c]\n", '0' + count, 'A' + octet);
 
         uint buffered = McpBuf.NumBytesBuffered();
         if (buffered < n) {
@@ -318,18 +329,27 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
           Panic();
         }
         // GetBytesFromTether:
+//      printf("TX#%d (buf=%d)\n", n, buffered);
         for (uint i = 0; i < n; i++) {
           dma_buffer[i] = McpBuf.Take();
-          printf(" %dg%d ", i, dma_buffer[i]);
+//        if (i<8) printf(" [%d]g%d ", i, dma_buffer[i]);
         }
-        printf("\n");
+//      printf(" ok TX\n");
+
+#if DMA_TX
         StartDmaTx(pio, smR, channel, config, n);
+#else
+        //for (uint i = 0; i < n; i++) {
+            //FifoWaitAndPut(pio, smR, dma_buffer[i]);
+        //}
+        //printf("TXd %d\n", n);
+#endif
 
       } else if (101 <= octet && octet <= 200) {
         // COCO WRITES n BYTES TO MCP.
         uint n = octet - 100;
         // printf("[%d]  %d: coco writes %d bytes for MCP\n", count, octet, n);
-        printf("[%c,%c]\n", '0' + count, 'a' + octet - 100);
+        //printf("[%c,%c]\n", '0' + count, 'a' + octet - 100);
 
         if (num_bytes_to_mcp != 0) {
           printf(
@@ -339,29 +359,8 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
           Panic();
         }
 
+#if DMA_RX
         StartDmaRx(pio, smR, channel, config, n);
-
-#if 0
-        // enable DMA: coco writes become Rx inputs, get copied to dma_buffer.
-        channel_config_set_read_increment(config, false);
-        channel_config_set_write_increment(config, true);
-        channel_config_set_dreq(config,
-                                pio_get_dreq(pio, smW, /*is_tx*/ false));
-
-        channel_config_set_transfer_data_size(config, DMA_SIZE_8);
-        channel_config_set_irq_quiet(config, true);
-
-        channel_config_set_enable(config, true);
-
-        auto rxfifo = &pio->rxf[smW];
-
-        dma_channel_configure(channel,     // Channel to be configured
-                              config,      // The configuration we just created
-                              dma_buffer,  // The initial write address
-                              rxfifo,      // The initial read address
-                              n,           // Number of transfers
-                              true         // Start immediately.
-        );
 #endif
 
         num_bytes_to_mcp = n;
@@ -369,12 +368,21 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
       } else if (octet == 250) {
         // QUERY SIZE OF MCP IN BUFFER
         uint size = McpBuf.NumBytesBuffered();
-        printf("[%d]  %d: querying size => %d from MCP buffered\n", count,
-               octet, size);
+      printf("[%d]  %d: querying size => %d from MCP buffered\n", count,
+             octet, size);
 
         dma_buffer[0] = (byte)(size >> 8);
         dma_buffer[1] = (byte)(size >> 0);
-        StartDmaTx(pio, smR, channel, config, 2);
+        constexpr uint n = 2;
+
+#if DMA_TX
+        StartDmaTx(pio, smR, channel, config, n);
+#else
+        //for (uint i = 0; i < n; i++) {
+            //FifoWaitAndPut(pio, smR, dma_buffer[i]);
+        //}
+        //printf("TXd %d\n", n);
+#endif
 
       } else if (octet == 251) {
         // PUSH num_bytes_to_mcp TO MCP.
@@ -410,9 +418,48 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
         Panic();
       } // what octet
 
-      FifoPut(pio, smS, 241);           // Try a junk first.
+      //FifoPut(pio, smS, 241);           // Try a junk first.
       FifoPut(pio, smS, status_reply);  // Status is now 1: Ready.
-      FifoPut(pio, smS, 244);           // Try a junk first.
+      //FifoPut(pio, smS, 244);           // Try a junk first.
+
+      if (1 <= octet && octet <= 100) {
+        const uint n = octet;
+#if DMA_TX
+        // StartDmaTx(pio, smR, channel, config, n);
+#else
+        for (uint i = 0; i < n; i++) {
+            FifoWaitAndPut(pio, smR, dma_buffer[i]);
+        }
+        printf("TXd %d\n", n);
+#endif
+      }
+
+      if (octet == 250) {
+        const uint n = 2;
+#if DMA_TX
+        // StartDmaTx(pio, smR, channel, config, n);
+#else
+        for (uint i = 0; i < n; i++) {
+            FifoWaitAndPut(pio, smR, dma_buffer[i]);
+        }
+        printf("TXd %d\n", n);
+#endif
+      }
+
+#if DMA_RX
+#else
+      // NON-DMA-RX
+      if (101 <= octet && octet <= 200) {
+        // COCO WRITES n BYTES TO MCP.
+        const uint n = octet - 100;
+
+        for (uint i = 0; i < n; i++) {
+            uint x = FifoWaitAndGet(pio, smW);
+            dma_buffer[i] = (byte)x;
+        }
+        printf("RX done %d\n", n);
+      }
+#endif
 
       printf("[%d] -> %d.\n", count, status_reply);
 
@@ -422,10 +469,6 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
     } // if Try Fifo -> octet
   }
 
-  pio_sm_set_enabled(pio, smC, false);
-  pio_sm_set_enabled(pio, smS, false);
-  pio_sm_set_enabled(pio, smR, false);
-  pio_sm_set_enabled(pio, smW, false);
 }
 
 void SpoonFeed(PIO pio) {

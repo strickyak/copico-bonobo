@@ -17,11 +17,11 @@
     mov osr, ~ null          ; become outputs
     out pindirs, 8         
 
-    pull                     ; wait for DMA.  Should be a very short time!?
+    pull noblock     side 0  ; wait for DMA.  Should be a very short time!?
     out pins, 8      side 0
 
-    wait 1 gpio 26           ; wait for strobe to finish -------
-    nop           [7]
+    wait 1 gpio 28           ; wait for strobe to finish -------
+    nop           [3]
 
 .wrap
 

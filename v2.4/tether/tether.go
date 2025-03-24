@@ -43,6 +43,7 @@ func helloMcp() {
 }
 
 func logHex(prefix string, bb []byte) {
+if false {
     n := len(bb)
     for x := 0; x < n; x += 32 {
         var buf bytes.Buffer
@@ -64,6 +65,7 @@ func logHex(prefix string, bb []byte) {
         Logf("%q %s", prefix, buf.String());
     }
     Logf("")
+}
 }
 
 func loopFromMcpToWire() {
@@ -144,14 +146,13 @@ func feedFirmwareToWire() {
 
 func run() {
 	// Open wire connection to Bonobo
-	options := serial.OpenOptions{
+	wire = Value(serial.Open(serial.OpenOptions{
 		PortName:        *WIRE,
 		BaudRate:        *BAUD,
 		DataBits:        8,
 		StopBits:        1,
 		MinimumReadSize: 1,
-	}
-	wire = Value(serial.Open(options))
+	}))
 	defer wire.Close()
 	Logf("Serial wire opened %q", *WIRE)
 
@@ -195,18 +196,6 @@ func main() {
 	}
 }
 
-/*
-func hi(a word) byte {
-	return byte(a >> 8)
-}
-func lo(a word) byte {
-	return byte(a)
-}
-func hilo(hi, lo byte) word {
-	return (word(hi) << 8) | word(lo)
-}
-*/
-
 func assertEq[T Ordered](a, b T) {
 	if a != b {
 		log.Fatalf("assertEq fails: %v vs %v", a, b)
@@ -235,3 +224,15 @@ func Check(err error, args ...any) {
 
 var Logf = log.Printf
 var Panicf = log.Panicf
+
+/*
+func hi(a word) byte {
+	return byte(a >> 8)
+}
+func lo(a word) byte {
+	return byte(a)
+}
+func hilo(hi, lo byte) word {
+	return (word(hi) << 8) | word(lo)
+}
+*/
