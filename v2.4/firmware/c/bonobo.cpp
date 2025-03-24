@@ -120,9 +120,9 @@ class CircBuf {
 
   uint NumBytesBuffered() {
     if (nextOut <= nextIn) {
-      return= nextIn - nextOut;
+      return nextIn - nextOut;
     } else {
-      return= N + nextIn - nextOut;
+      return N + nextIn - nextOut;
     }
   }
 
