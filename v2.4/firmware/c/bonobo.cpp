@@ -119,20 +119,11 @@ class CircBuf {
   CircBuf() : nextIn(0), nextOut(0) {}
 
   uint NumBytesBuffered() {
-#if 0
-    uint j = 8;
-    for (uint i = nextOut; i != nextIn; i=(i+1)%N) {
-        printf("/%x ", buf[i]);
-        if (j-- == 0) break;
+    if (nextOut <= nextIn) {
+      return= nextIn - nextOut;
+    } else {
+      return= N + nextIn - nextOut;
     }
-#endif
-    uint z;
-    if (nextOut <= nextIn)
-      z = nextIn - nextOut;
-    else
-      z = nextIn + N - nextOut;
-    // printf(" -> %04x buf\n", z);
-    return z;
   }
 
   byte Take() {
@@ -291,7 +282,6 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
     ////////////// From COCO
 
     if (TryFifoGet(pio, smC, &octet)) {  // octet <- byte via Control Write
-      byte status_reply = 1;              // the default reply, if not changed.
 
       if (1 <= octet && octet <= 100) {
         // COCO READS n BYTES FROM MCP.
@@ -352,6 +342,7 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
 
         dma_buffer[0] = (byte)(size >> 8);
         dma_buffer[1] = (byte)(size >> 0);
+        // printf("Q(%x,%x)=%x\n", dma_buffer[0], dma_buffer[1], size);
 
         constexpr uint n = 2;
 #if DMA_TX
@@ -365,8 +356,8 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
 
       } else if (octet == 251) {
         // PUSH num_bytes_to_mcp TO MCP.
-        printf("[%d]  %d: Going to push %d bytes to MCP\n", count, octet,
-               num_bytes_to_mcp);
+        //printf("[%d]  %d: Going to push %d bytes to MCP\n", count, octet,
+               //num_bytes_to_mcp);
 
         if (!(1 <= num_bytes_to_mcp && num_bytes_to_mcp <= 100)) {
           printf("Got octet %d (PUSH) but num_bytes_to_mcp is %d\n", octet,
@@ -390,16 +381,14 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
 
       } else if (octet == 252) {
         // Bonobo Presence Query
-        printf("\n[%d] Probe 252->'b'\n", count);
-        status_reply = 'b';  // A special answer.
+        // printf("\n[%d] Probe 252->'b'\n", count);
+
       } else {
         printf("\n[%d] Panic: bad command byte %d\n", count, octet);
         Panic();
       } // what octet
 
-      //FifoPut(pio, smS, 241);           // Try a junk first.
-      FifoPut(pio, smS, status_reply);  // Status is now 1: Ready.
-      //FifoPut(pio, smS, 244);           // Try a junk first.
+      FifoPut(pio, smS, 'b');             // Good Status is 'b' for bonobo.
 
       if (1 <= octet && octet <= 100) {
         const uint n = octet;
