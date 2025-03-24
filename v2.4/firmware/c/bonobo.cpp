@@ -337,8 +337,9 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
           Panic();
         }
 
+#define DMA_RX 1
 #if DMA_RX
-        StartDmaRx(pio, smR, channel, config, n);
+        StartDmaRx(pio, smW, channel, config, n);
 #endif
 
         num_bytes_to_mcp = n;
@@ -351,8 +352,8 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
 
         dma_buffer[0] = (byte)(size >> 8);
         dma_buffer[1] = (byte)(size >> 0);
-        constexpr uint n = 2;
 
+        constexpr uint n = 2;
 #if DMA_TX
         StartDmaTx(pio, smR, channel, config, n);
 #else
@@ -425,6 +426,7 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
       }
 
 #if DMA_RX
+    // NOT HERE
 #else
       // NON-DMA-RX
       if (101 <= octet && octet <= 200) {
