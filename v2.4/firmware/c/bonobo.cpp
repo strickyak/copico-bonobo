@@ -109,16 +109,6 @@ void FifoWaitAndPut(PIO pio, uint sm, uint x) {
   FifoPut(pio, sm, x);
 }
 
-void InitialBlinks() {
-  for (uint blink = 0; blink < 3; blink++) {
-    LED(0);
-    sleep_ms(500);
-    LED(1);
-    sleep_ms(500);
-    printf("blink %d\n", blink);
-  }
-}
-
 template <uint N>
 class CircBuf {
  private:
@@ -228,16 +218,7 @@ void Panic() {
   }
 }
 
-// READ PIO DMA: The first read is lost, from bigger[0].
-// The next 256 reads are read by 256 read cycles, dma_buffer[0-255].
-// Then one final read cycle clears the pipe, counts as 257,
-// but does not cause "direction" to change,
-// so what is going on in the state machine!?
-
-constexpr uint HACK =
-    0;  // Mark where our DMA ReadToCoco is Off by One and Hacked.
-byte bigger[256 + HACK];
-#define dma_buffer (bigger + HACK)
+byte dma_buffer[111];
 
 void StartDmaTx(PIO pio, int sm, int channel, dma_channel_config* config,
                 uint size) {
@@ -253,12 +234,11 @@ void StartDmaTx(PIO pio, int sm, int channel, dma_channel_config* config,
   auto txfifo = &pio->txf[sm];
 
   dma_channel_configure(
-      channel,  // Channel to be configured
-      config,   // The configuration we just created
-      txfifo,   // The initial write address
-      dma_buffer -
-          HACK,     // The initial read address ([HACK] with 1 waste at front)
-      size + HACK,  // Number of transfers, [HACK] counting 1 waste at back.
+      channel,      // Channel to be configured
+      config,       // The configuration we just created
+      txfifo,       // The initial write address
+      dma_buffer,   // The initial read address
+      size,         // Number of transfers,
       true          // Start immediately.
   );
 }
@@ -282,7 +262,7 @@ void StartDmaRx(PIO pio, int sm, int channel, dma_channel_config* config,
                               config,      // The configuration we just created
                               dma_buffer,  // The initial write address
                               rxfifo,      // The initial read address
-                              size,           // Number of transfers
+                              size,        // Number of transfers
                               true         // Start immediately.
         );
 }
@@ -290,11 +270,11 @@ void StartDmaRx(PIO pio, int sm, int channel, dma_channel_config* config,
 void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
   constexpr uint smC = 0, smS = 1, smR = 2,
                  smW = 3;  // control, status, read, & write.
-  // int lit = 0;
   int count = 0;
   uint num_bytes_to_mcp = 0;
 
   while (true) {
+    byte octet;
 
     bool reset = gpio_get(G_RESET);
     if (reset == false) {  // Active Low
@@ -302,14 +282,11 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
       break;
     }
 
-    byte octet;
     ////////////// From MCP
     // Attempt to get a byte from the MCP.
     // If we get one, add it to the McpBuf.
     if (TryGetByte(&octet)) {
-#if 1
       McpBuf.Put(octet);
-#endif
     }
     ////////////// From COCO
 
@@ -336,6 +313,7 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
         }
 //      printf(" ok TX\n");
 
+#define DMA_TX 1
 #if DMA_TX
         StartDmaTx(pio, smR, channel, config, n);
 #else
@@ -425,7 +403,7 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
       if (1 <= octet && octet <= 100) {
         const uint n = octet;
 #if DMA_TX
-        // StartDmaTx(pio, smR, channel, config, n);
+        // NOT HERE // StartDmaTx(pio, smR, channel, config, n);
 #else
         for (uint i = 0; i < n; i++) {
             FifoWaitAndPut(pio, smR, dma_buffer[i]);
@@ -437,7 +415,7 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
       if (octet == 250) {
         const uint n = 2;
 #if DMA_TX
-        // StartDmaTx(pio, smR, channel, config, n);
+        // NOT HERE // StartDmaTx(pio, smR, channel, config, n);
 #else
         for (uint i = 0; i < n; i++) {
             FifoWaitAndPut(pio, smR, dma_buffer[i]);
@@ -617,9 +595,11 @@ int main() {
 
   stdio_usb_init();
   printf("*** HELLO BONOBO\n");
-  for (uint i = 0; i < 256; i++) dma_buffer[i] = (byte)(i ^ 8);
 
-  // InitialBlinks(); // 3 second delay; 3 blinks.
+  // Put a distinctive pattern in dma_buffer, to see if it is changed.
+  for (uint i = 0; i < sizeof dma_buffer; i++) {
+    dma_buffer[i] = (byte)(i ^ 8); // counts 8 to 15, then 0 to 7, then 24 to 31...
+  }
 
   int channel = dma_claim_unused_channel(/*required*/ true);
   dma_channel_config config = dma_channel_get_default_config(channel);
@@ -627,21 +607,8 @@ int main() {
   while (true) {
     SpoonFeed(pio);
 
-#if 1
     StartPortals(pio);
     OperatePortals(pio, channel, &config);
     StopPortals(pio);
-#endif
   }
 }  // main
-
-// Hints:
-// pio_sm_set_pins_with_mask
-// pio_sm_set_pins_with_mask
-// pio_sm_set_consecutive_pindirs
-// gpio_set_dir_all_bits
-// gpio_put_masked
-// gpio_put
-// gpio_init
-// gpio_init_mask
-// gpio_pull_up
