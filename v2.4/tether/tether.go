@@ -10,7 +10,7 @@ import (
 	"os"
 	"log"
 	"net"
-	"runtime/debug"
+	// "runtime/debug"
 	"time"
 )
 
@@ -173,12 +173,18 @@ func run() {
     loopFromChannelToMcp()
 }
 
+var previousRecover string
+
 func tryRun() {
     // Make one attempt to run, catching any panic.
 	defer func() {
 		r := recover()
 		if r != nil {
-			fmt.Printf("[recover: %q]\n", r)
+            s := Format("%v", r)
+            if s != previousRecover {
+			    fmt.Printf("[recover: %q]\n", r)
+                previousRecover = s
+            }
 		}
 	}()
 	run()
@@ -217,13 +223,15 @@ func Check(err error, args ...any) {
 		for _, x := range args {
 			s += fmt.Sprintf(" ; %v", x)
 		}
-		s += "\n[[[[[[\n" + string(debug.Stack()) + "\n]]]]]]\n"
-		log.Panic(s)
+		// s += "\n[[[[[[\n" + string(debug.Stack()) + "\n]]]]]]\n"
+		// log.Panic(s)
+        panic(s)
 	}
 }
 
 var Logf = log.Printf
 var Panicf = log.Panicf
+var Format = fmt.Sprintf
 
 /*
 func hi(a word) byte {
