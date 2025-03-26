@@ -1,12 +1,13 @@
 #!/bin/sh
 
 set -eux
+cd $(dirname $0)
 
 PRAGMATA='--pragma=undefextern --pragma=cescapes --pragma=importundefexport'
 
-alias gcc="$HOME/coco-shelf/bin/gcc6809"
-alias lwasm="$HOME/coco-shelf/bin/lwasm"
-alias lwlink="$HOME/coco-shelf/bin/lwlink"
+alias gcc="../../../bin/gcc6809"
+alias lwasm="../../../bin/lwasm"
+alias lwlink="../../../bin/lwlink"
 
 case $# in
     2) : good ;;

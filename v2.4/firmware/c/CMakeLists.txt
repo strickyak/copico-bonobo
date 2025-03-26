@@ -1,6 +1,7 @@
 set(PROJECT bonobo)
 cmake_minimum_required(VERSION 3.12)
-include($ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake)
+# // include($ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake)
+include(../../../../pico-sdk/external/pico_sdk_import.cmake)
 project(${PROJECT} C CXX ASM)
 
 set(PICO_BOARD pico)
