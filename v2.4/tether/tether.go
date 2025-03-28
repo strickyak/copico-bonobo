@@ -7,9 +7,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"os"
 	"log"
 	"net"
+	"os"
 	// "runtime/debug"
 	"time"
 )
@@ -18,128 +18,118 @@ var WIRE = flag.String("wire", "/dev/ttyACM0", "serial device connected by USB t
 var BAUD = flag.Uint("baud", 115200, "serial device baud rate")
 var FIRMWARE = flag.String("firmware", "nekot-bonobo", "binary to load on startup")
 var MCP = flag.String("mcp", "localhost:2321", "global LEMMA server or MCP server or local test MCP server")
-var HANDLE = flag.String("handle", "ZZZ", "three-letter handle for this user")
+var HANDLE = flag.String("handle", "ZZZ", "three-letter handle for this user.  TODO: actually use this.")
 
 var wire io.ReadWriteCloser
 var mcp io.ReadWriteCloser
 var channel chan byte
 
 func helloMcp() {
-    // Enough to satisfy the MCP.
-    q1 := []byte{1, 1, 0, 0xDF, 0x00}
-    p1 := make([]byte, 256)
-    copy(p1[0xE0:0xE8] , []byte("SFO     "))
+	// Enough to satisfy the MCP.
+	q1 := []byte{1, 1, 0, 0xDF, 0x00}
+	p1 := make([]byte, 256)
+	copy(p1[0xE0:0xE8], []byte("SFO     "))  // TODO: use *HANDLE.
 
-    q2 := []byte{1, 0, 'T', 0x01, 0xDA}
-    p2 := make([]byte, 'T')
+	q2 := []byte{1, 0, 'T', 0x01, 0xDA}
+	p2 := make([]byte, 'T')
 
-    const Greeting = "bonobo-nekot1"
-    q3 := []byte{1, 0, byte(len(Greeting)), 0, 0}
-    p3 := []byte(Greeting)
+	const Greeting = "bonobo-nekot1"
+	q3 := []byte{1, 0, byte(len(Greeting)), 0, 0}
+	p3 := []byte(Greeting)
 
-    for _, bb := range [][]byte{q1, p1, q2, p2, q3, p3} {
-        Value(mcp.Write(bb))
-    }
+	for _, bb := range [][]byte{q1, p1, q2, p2, q3, p3} {
+		Value(mcp.Write(bb))
+	}
 }
 
 func logHex(prefix string, bb []byte) {
-if false {
-    n := len(bb)
-    for x := 0; x < n; x += 32 {
-        var buf bytes.Buffer
-        fmt.Fprintf(&buf, "%02x: ", x)
-        for y := 0; x + y < n; y++ {
-            fmt.Fprintf(&buf, "%02x ", bb[x+y])
-            if (y&3)==3 {
-                fmt.Fprintf(&buf, " ")
-            }
-        }
-        for y := 0; x + y < n; y++ {
-            c := bb[x+y]
-            if 32 <= c && c <= 126 {
-                fmt.Fprintf(&buf, "%c", bb[x+y])
-            } else {
-                fmt.Fprintf(&buf, "~")
-            }
-        }
-        Logf("%q %s", prefix, buf.String());
-    }
-    Logf("")
-}
+	if false {
+		n := len(bb)
+		for x := 0; x < n; x += 32 {
+			var buf bytes.Buffer
+			fmt.Fprintf(&buf, "%02x: ", x)
+			for y := 0; x+y < n; y++ {
+				fmt.Fprintf(&buf, "%02x ", bb[x+y])
+				if (y & 3) == 3 {
+					fmt.Fprintf(&buf, " ")
+				}
+			}
+			for y := 0; x+y < n; y++ {
+				c := bb[x+y]
+				if 32 <= c && c <= 126 {
+					fmt.Fprintf(&buf, "%c", bb[x+y])
+				} else {
+					fmt.Fprintf(&buf, "~")
+				}
+			}
+			Logf("%q %s", prefix, buf.String())
+		}
+		Logf("")
+	}
 }
 
 func loopFromMcpToWire() {
-    const N = 4096
+	const N = 4096
 	var bb [N]byte
 	for {
-        count := Value(mcp.Read(bb[:]))
-        Value(wire.Write(bb[:count]))
-        logHex("mcp", bb[:count])
+		count := Value(mcp.Read(bb[:]))
+		Value(wire.Write(bb[:count]))
+		logHex("mcp", bb[:count])
 	}
 }
 
 func loopFromWireToChannel() {
-    defer func() {
-        r := recover()
-        if r != nil {
-            Logf("loopFromWireToChannel: Closing channel because %v", r)
-            close(channel)
-        }
-    }()
+	defer func() {
+		r := recover()
+		if r != nil {
+			Logf("loopFromWireToChannel: Closing channel because %v", r)
+			close(channel)
+		}
+	}()
 
-    const N = 128
+	const N = 128
 	var bb [N]byte
-    for {
-        count := Value(wire.Read(bb[:]))
-        for i := 0; i < count; i++ {
-            channel <- bb[i]
-        }
-    }
+	for {
+		count := Value(wire.Read(bb[:]))
+		for i := 0; i < count; i++ {
+			channel <- bb[i]
+		}
+	}
 }
 
 func loopFromChannelToMcp() {
-    defer func() {
-        r := recover()
-        if r != nil {
-            Logf("loopFromChannelToMcp: Closing mcp because %v", r)
-            mcp.Close()
-        }
-    }()
+	defer func() {
+		r := recover()
+		if r != nil {
+			Logf("loopFromChannelToMcp: Closing mcp because %v", r)
+			mcp.Close()
+		}
+	}()
 
-    const N = 128
+	const N = 128
 	var bb [N]byte
-    for {
-        x, ok := <-channel
-        if (!ok) {
-            return
-        }
-        if x <= 128 {
-            // Low numbers are logged to stderr.
-            Value(os.Stderr.Write([]byte{x}))
-        } else {
-            // High number start a sequence to MCP.
-            size := int(x-128)
-            for i:=0; i < size ; i++ {
-                y, ok := <-channel
-                if (!ok) {
-                    return
-                }
-                bb[i] = y
-            }
-            Value(mcp.Write(bb[:size]))
-            logHex("wire", bb[:size])
-        }
-    }
-}
-
-func feedFirmwareToWire() {
-    for i := 10; i > 0; i-- {
-        Logf("delay %d");
-        time.Sleep(time.Second)
-    }
-    Logf("Go.")
-    bb := Value(os.ReadFile(*FIRMWARE))
-    Value(wire.Write(bb))
+	for {
+		x, ok := <-channel
+		if !ok {
+			return
+		}
+		if x <= 128 {
+			// Low numbers are logged to stderr.
+			Value(os.Stderr.Write([]byte{x}))
+		} else {
+			// High number start a sequence to MCP.
+			size := int(x - 128)
+			for i := 0; i < size; i++ {
+				y, ok := <-channel
+				if !ok {
+					return
+				}
+				bb[i] = y
+			}
+			Value(mcp.Write(bb[:size]))
+			logHex("wire", bb[:size])
+		}
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -156,37 +146,35 @@ func run() {
 	defer wire.Close()
 	Logf("Serial wire opened %q", *WIRE)
 
+	// TODO -- wait until Coco seems reset and Pico seems happy.
 	// Open network connection to MCP
 	mcp = Value(net.Dial("tcp", *MCP))
 	defer mcp.Close()
 	Logf("TCP mcp opened %q", *MCP)
-    helloMcp()
+	helloMcp()
 
-    channel = make(chan byte)
-
-/*
-    feedFirmwareToWire();
-*/
+	channel = make(chan byte)
 
 	go loopFromMcpToWire()
 	go loopFromWireToChannel()
-    loopFromChannelToMcp()
+	loopFromChannelToMcp()
 }
 
 var previousRecover string
 
 func tryRun() {
-    // Make one attempt to run, catching any panic.
+	// Make one attempt to run, catching any panic.
 	defer func() {
 		r := recover()
 		if r != nil {
-            s := Format("%v", r)
-            if s != previousRecover {
-			    fmt.Printf("[recover: %q]\n", r)
-                previousRecover = s
-            }
+			s := Format("%v", r)
+			if s != previousRecover {
+				fmt.Printf("[recover: %q]\n", r)
+				previousRecover = s
+			}
 		}
 	}()
+	Logf("tryRun...")
 	run()
 }
 
@@ -197,7 +185,7 @@ func main() {
 
 	for {
 		tryRun()
-        // when disconnected, wait a second before retry.
+		// when disconnected, wait a second before retry.
 		time.Sleep(time.Second)
 	}
 }
@@ -223,24 +211,10 @@ func Check(err error, args ...any) {
 		for _, x := range args {
 			s += fmt.Sprintf(" ; %v", x)
 		}
-		// s += "\n[[[[[[\n" + string(debug.Stack()) + "\n]]]]]]\n"
-		// log.Panic(s)
-        panic(s)
+		panic(s)
 	}
 }
 
 var Logf = log.Printf
 var Panicf = log.Panicf
 var Format = fmt.Sprintf
-
-/*
-func hi(a word) byte {
-	return byte(a >> 8)
-}
-func lo(a word) byte {
-	return byte(a)
-}
-func hilo(hi, lo byte) word {
-	return (word(hi) << 8) | word(lo)
-}
-*/
