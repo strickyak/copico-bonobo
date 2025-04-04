@@ -51,7 +51,7 @@ extern int stdio_usb_in_chars(char* buf, int length);
 typedef unsigned char byte;
 typedef unsigned int word;
 
-#include "_nekot1.decb.h"
+#include "_kernel.decb.h"
 #include "bootdata.h"
 //
 #include "spoon.pio.h"

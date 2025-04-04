@@ -1,4 +1,4 @@
-all: decb_to_word_pairs.elf build-c/_nekot1.decb.h
+all: decb_to_word_pairs.elf build-c/_kernel.decb.h
 	sh compile-and-wrap-with-py.sh  life-semi.c bonobo-life-semi.py
 	./decb_to_word_pairs.elf "c" < life-semi.decb > demo-life-semi-c/life-semi.decb.for-c.h
 
@@ -7,10 +7,10 @@ decb_to_word_pairs.elf: decb_to_word_pairs.c
 
 
 
-build-c/_nekot1.decb.h: ../../../nekot-coco-microkernel/build-for-16k-bonobo
+build-c/_kernel.decb.h: ../../../nekotos/build-for-16k-bonobo
 	./decb_to_word_pairs.elf "c" \
-        < ../../../nekot-coco-microkernel/build-for-16k-bonobo/_nekot1.decb \
-        > build-c/_nekot1.decb.h
+        < ../../../nekotos/build-for-16k-bonobo/_kernel.decb \
+        > build-c/_kernel.decb.h
 
 clean:
 	rm -f *.elf *.list *.map *.o *.s *.decb *.tmp

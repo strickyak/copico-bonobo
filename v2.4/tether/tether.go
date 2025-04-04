@@ -16,7 +16,7 @@ import (
 
 var WIRE = flag.String("wire", "/dev/ttyACM0", "serial device connected by USB to Pi Pico")
 var BAUD = flag.Uint("baud", 115200, "serial device baud rate")
-var FIRMWARE = flag.String("firmware", "nekot-bonobo", "binary to load on startup")
+var FIRMWARE = flag.String("firmware", "nekotos-bonobo", "binary to load on startup")
 var MCP = flag.String("mcp", "localhost:2321", "global LEMMA server or MCP server or local test MCP server")
 var HANDLE = flag.String("handle", "ZZZ", "three-letter handle for this user.  TODO: actually use this.")
 
@@ -33,7 +33,7 @@ func helloMcp() {
 	q2 := []byte{1, 0, 'T', 0x01, 0xDA}
 	p2 := make([]byte, 'T')
 
-	const Greeting = "bonobo-nekot1"
+	const Greeting = "bonobo-nekotos"
 	q3 := []byte{1, 0, byte(len(Greeting)), 0, 0}
 	p3 := []byte(Greeting)
 
