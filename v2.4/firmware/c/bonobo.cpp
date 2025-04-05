@@ -587,7 +587,7 @@ int main() {
   stdio_usb_init();
   printf("*** HELLO BONOBO\n");
 
-  // Put a distinctive pattern in dma_buffer, to see if it is changed.
+  // Debugging: Put a distinctive pattern in dma_buffer, to see if it is changed.
   for (uint i = 0; i < sizeof dma_buffer; i++) {
     dma_buffer[i] = (byte)(i ^ 8); // counts 8 to 15, then 0 to 7, then 24 to 31...
   }

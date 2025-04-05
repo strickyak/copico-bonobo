@@ -18,27 +18,63 @@ var WIRE = flag.String("wire", "/dev/ttyACM0", "serial device connected by USB t
 var BAUD = flag.Uint("baud", 115200, "serial device baud rate")
 var FIRMWARE = flag.String("firmware", "nekotos-bonobo", "binary to load on startup")
 var MCP = flag.String("mcp", "localhost:2321", "global LEMMA server or MCP server or local test MCP server")
-var HANDLE = flag.String("handle", "ZZZ", "three-letter handle for this user.  TODO: actually use this.")
+
+var HANDLE = flag.String("handle", "ZZZ", "three-letter handle for this user.")
+var NAME = flag.String("name", "No Name", "Your name or pseudonym.   If you are under 18, don't tell your name!")
+var ZONE = flag.String("zone", "", "Override zone; default comes from --airport")
+var AIRPORT = flag.String("airport", "ORD", "three-letter IANA airport destination code.")
 
 var wire io.ReadWriteCloser
 var mcp io.ReadWriteCloser
 var channel chan byte
 
-func helloMcp() {
-	// Enough to satisfy the MCP.
-	q1 := []byte{1, 1, 0, 0xDF, 0x00}
-	p1 := make([]byte, 256)
-	copy(p1[0xE0:0xE8], []byte("SFO     "))  // TODO: use *HANDLE.
+const (
+	// Borrow $FFxx "addresses" for tagging Info
+	HELLO_HANDLE  = 0xFF00
+	HELLO_NAME    = 0xFF01
+	HELLO_ZONE    = 0xFF02
+	HELLO_AIRPORT = 0xFF03
+)
 
-	q2 := []byte{1, 0, 'T', 0x01, 0xDA}
-	p2 := make([]byte, 'T')
+func AxiomHostnameFromHandle() (z [8]byte) {
+	h := *HANDLE
+	n := len(h)
+	for i := range z {
+		if i < n {
+			z[i] = h[i]
+		} else {
+			z[i] = ' '
+		}
+	}
+	return
+}
 
-	const Greeting = "bonobo-nekotos"
-	q3 := []byte{1, 0, byte(len(Greeting)), 0, 0}
-	p3 := []byte(Greeting)
+func sendAxiomStyleHellos() {
+	// Enough to satisfy Lemma.
 
-	for _, bb := range [][]byte{q1, p1, q2, p2, q3, p3} {
-		Value(mcp.Write(bb))
+	pay_DF00 := make([]byte, 256)
+	hostname := AxiomHostnameFromHandle()
+	copy(pay_DF00[0xE0:0xE8], hostname[:])
+
+	pay_01DA := make([]byte, 'T') // 64 + 'T' = 94 zeroes.
+
+	// Now special tether fields for the MCP.
+	// Finally the $0000 block, with the special handling greeting.
+	const SpecialHandlingGreeting = "bonobo-nekotos"
+	for _, rec := range []struct {
+		id  uint
+		val []byte
+	}{
+		{0xDF00, pay_DF00},
+		{0x01DA, pay_01DA},
+		{HELLO_HANDLE, []byte(*HANDLE)},
+		{HELLO_NAME, []byte(*NAME)},
+		{HELLO_ZONE, []byte(*ZONE)},
+		{HELLO_AIRPORT, []byte(*AIRPORT)},
+		{0, []byte(SpecialHandlingGreeting)}, // 0 must be last.
+	} {
+		Value(mcp.Write([]byte{1, Hi(len(rec.val)), Lo(len(rec.val)), Hi(rec.id), Lo(rec.id)}))
+		Value(mcp.Write(rec.val))
 	}
 }
 
@@ -151,7 +187,7 @@ func run() {
 	mcp = Value(net.Dial("tcp", *MCP))
 	defer mcp.Close()
 	Logf("TCP mcp opened %q", *MCP)
-	helloMcp()
+	sendAxiomStyleHellos()
 
 	channel = make(chan byte)
 
@@ -199,6 +235,9 @@ func assertEq[T Ordered](a, b T) {
 type Ordered interface {
 	~byte | ~int | ~uint | ~int64 | ~uint64 | ~rune | ~string
 }
+type Integer interface {
+	~int | ~uint
+}
 
 func Value[T any](value T, err error) T {
 	Check(err)
@@ -218,3 +257,10 @@ func Check(err error, args ...any) {
 var Logf = log.Printf
 var Panicf = log.Panicf
 var Format = fmt.Sprintf
+
+func Hi[T Integer](x T) byte {
+	return byte(x >> 8)
+}
+func Lo[T Integer](x T) byte {
+	return byte(x >> 0)
+}
