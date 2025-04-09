@@ -1,11 +1,17 @@
-all: decb_to_word_pairs.elf build-c/_kernel.decb.h
+all: decb_to_word_pairs.elf build-c/_kernel.decb.h build-c/_loados.decb.h
 	sh compile-and-wrap-with-py.sh  life-semi.c bonobo-life-semi.py
 	./decb_to_word_pairs.elf "c" < life-semi.decb > demo-life-semi-c/life-semi.decb.for-c.h
 
 decb_to_word_pairs.elf: decb_to_word_pairs.c
 	$(CC) $(CFLAGS) -o decb_to_word_pairs.elf decb_to_word_pairs.c
 
+loados/loados.decb: FORCE
+	make -C loados
 
+build-c/_loados.decb.h: loados/loados.decb
+	./decb_to_word_pairs.elf "c" \
+        < loados/loados.decb \
+        > build-c/_loados.decb.h
 
 build-c/_kernel.decb.h: ../../../nekotos/build-for-16k-bonobo
 	./decb_to_word_pairs.elf "c" \
@@ -14,6 +20,8 @@ build-c/_kernel.decb.h: ../../../nekotos/build-for-16k-bonobo
 
 clean:
 	rm -f *.elf *.list *.map *.o *.s *.decb *.tmp
+
+FORCE:
 
 ##  all: life-semi.decb life-semi.python bonobo-step52.py
 ##  

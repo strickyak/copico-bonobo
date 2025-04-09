@@ -4,6 +4,8 @@
 
 // HINT: $ minicom -b 115200 -D /dev/ttyACM0
 
+#define FOR_LOADOS 1
+
 #include <hardware/clocks.h>
 #include <hardware/dma.h>
 #include <hardware/pio.h>
@@ -51,7 +53,13 @@ extern int stdio_usb_in_chars(char* buf, int length);
 typedef unsigned char byte;
 typedef unsigned int word;
 
+#ifdef FOR_LOADOS
+#include "_loados.decb.h"
+#else
 #include "_kernel.decb.h"
+#endif
+
+
 #include "bootdata.h"
 //
 #include "spoon.pio.h"

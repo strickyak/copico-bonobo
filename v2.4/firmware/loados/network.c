@@ -55,14 +55,14 @@ void Loop() {
     }
 }
 
+const char TARGET_BUILD[] = "for-16k-bonobo";
+
 void RequestLoadOs() {
     ColdPrint("LOADOS ...");
-    gbyte hello[] = {
-        'l', 'o', 'a', 'd', '-', 'o', 's', '\0',
-    };
+    ColdPrint(TARGET_BUILD);
 
-    SendPacket(CMD_HELLO_NEKOT, 16, hello, sizeof hello);
-    ColdPrint("SENT LOADOS REQUEST");
+    SendPacket(CMD_HELLO_NEKOT, /*p=*/16, TARGET_BUILD, strlen(TARGET_BUILD));
+    ColdPrint("REQUEST SENT");
 }
 
 void Network_Init() {

@@ -158,21 +158,22 @@ void Console_Init() {
 
     // Draw a greenish bar across the top of the Console.
     for (gword p = CONSOLE_BEGIN; p < PANE_BEGIN; p+=2) {
-        gPoke2(p, 0x8C8C);  // greenish (in RGB or Composite) top bar
+        gPoke2(p, 0x9C9C);  // redish top bar
     }
 
-#if 0
-    // Fill the body of the screen with spaces.
+#if 1
+    // Fill the body of the screen with bangs.
     for (gword p = PANE_BEGIN; p < PANE_LIMIT; p+=2) {
-        gPoke2(p, 0x2020);
+        gPoke2(p, 0x2121);
     }
 #endif
 
     // Draw a blueish bar across the bottom of the Console.
     for (gword p = PANE_LIMIT; p < CONSOLE_LIMIT; p+=2) {
-        gPoke2(p, 0xA3A3);  // blueish (in RGB or Composite) bottom bar
+        gPoke2(p, 0x9393);  // redish bottom bar
     }
-    gPoke2(CONSOLE_LIMIT-31, 0xFF);
+    memcpy(CONSOLE_BEGIN+2, "LOADOS", 6);
+    memcpy(CONSOLE_LIMIT-32+2, "LOADOS", 6);
 
     gPoke1(Console.cursor, 0xFF);
 }

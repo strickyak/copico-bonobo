@@ -96,7 +96,7 @@ void Delay(gword n) {
 }
 
 void ColdPrint(const char* s) {
-    PutStr("*** ");
+    PutStr("___ ");
     PutStr(s);  
     PutChar('\n');
 
@@ -104,9 +104,9 @@ void ColdPrint(const char* s) {
     gPoke1(KEYBOARD_PROBE, ~(1<<4)); // Probe for Down Arrow
     gbyte sense = ((1<<3) & ~gPeek1(KEYBOARD_SENSE));
     if (sense) {
-        Delay(15000);
+        Delay(10000);
     } else {
-        Delay(1000);
+        Delay(10);
     }
 }
 
@@ -138,29 +138,30 @@ void SplashSet(int x, int y) {
 
 void Splash() {
     memcpy_words(0x0200, 0x0400, 256);
+    memset_words(0x0400, 0x1C1C, 256);  // $1C <- $5C <- '\\'
 
         for (int i = 0; i < 16; i++) {
             for (int x = 16 - i; x < 16 + i; x++) {
-                int y1 = 8 - i;
-                int y2 = 8 + i;
+                int y1 = 8 - (i>>1);
+                int y2 = 8 + (i>>1);
                 SplashSet(x, y1);
                 SplashSet(x, y2);
             }
-            for (int y = 8 - i; y < 8 + i; y++) {
+            for (int y = 8 - (i>>1); y <= 8 + (i>>1); y++) {
                 int x1 = 16 - i;
                 int x2 = 16 + i;
                 SplashSet(x1, y);
                 SplashSet(x2, y);
             }
-            Delay(100);
+            Delay(200);
 
             for (int x = 16 - i; x < 16 + i; x++) {
-                int y1 = 8 - i;
-                int y2 = 8 + i;
+                int y1 = 8 - (i>>1);
+                int y2 = 8 + (i>>1);
                 SplashRestore(x, y1);
                 SplashRestore(x, y2);
             }
-            for (int y = 8 - i; y < 8 + i; y++) {
+            for (int y = 8 - (i>>1); y <= 8 + (i>>1); y++) {
                 int x1 = 16 - i;
                 int x2 = 16 + i;
                 SplashRestore(x1, y);
@@ -184,8 +185,14 @@ void setup(void) {
         gPoke1(p+yes, 0);
     }
 
-    ColdPrint("***************");
-    ColdPrint("*** LOAD-OS ***");
+    Console_Init();
+    ColdPrint("^^^^^^^^^^^^^^^^");
+    ColdPrint("^^^          ^^^");
+    ColdPrint("^^^  COPICO  ^^^");
+    ColdPrint("^^^  BONOBO  ^^^");
+    ColdPrint("^^^  LOADOS  ^^^");
+    ColdPrint("^^^          ^^^");
+    ColdPrint("^^^^^^^^^^^^^^^^");
 
     Splash();
 
