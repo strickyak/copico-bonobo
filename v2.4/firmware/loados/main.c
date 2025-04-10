@@ -233,11 +233,15 @@ void setup(void) {
 gbool volatile True;
 
 void gFatal(const char *s, gword arg) {
+    PutStr("FATAL");
+    PutChar('[');
+    PutHex(arg);
+    PutChar(']');
     ColdPrint(s);
 
     True = 1;
     while (True) {
-        gPoke2(Cons, gPeek2(Cons));
+        gPoke2(Cons, 1+gPeek2(Cons));
     }
 }
 
