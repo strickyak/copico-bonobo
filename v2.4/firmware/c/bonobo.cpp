@@ -124,7 +124,11 @@ class CircBuf {
   uint nextIn, nextOut;
 
  public:
-  CircBuf() : nextIn(0), nextOut(0) {}
+  void Reset() {
+    nextIn = nextOut = 0;
+  }
+
+  CircBuf() { Reset(); }
 
   uint NumBytesBuffered() {
     if (nextOut <= nextIn) {
@@ -390,6 +394,7 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
       } else if (octet == 252) {
         // Bonobo Presence Query
         // printf("\n[%d] Probe 252->'b'\n", count);
+        McpBuf.Reset();
 
       } else {
         printf("\n[%d] Panic: bad command byte %d\n", count, octet);
