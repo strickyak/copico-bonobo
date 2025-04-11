@@ -13,8 +13,8 @@
 #include <hardware/timer.h>
 #include <pico/stdlib.h>
 #include <pico/time.h>
-#include <stdio.h>
 #include <setjmp.h>
+#include <stdio.h>
 
 jmp_buf restart_jmp_buf;
 
@@ -61,7 +61,6 @@ typedef unsigned int word;
 #else
 #include "_kernel.decb.h"
 #endif
-
 
 #include "bootdata.h"
 //
@@ -127,9 +126,7 @@ class CircBuf {
   uint nextIn, nextOut;
 
  public:
-  void Reset() {
-    nextIn = nextOut = 0;
-  }
+  void Reset() { nextIn = nextOut = 0; }
 
   CircBuf() { Reset(); }
 
@@ -242,38 +239,36 @@ void StartDmaTx(PIO pio, int sm, int channel, dma_channel_config* config,
 
   auto txfifo = &pio->txf[sm];
 
-  dma_channel_configure(
-      channel,      // Channel to be configured
-      config,       // The configuration we just created
-      txfifo,       // The initial write address
-      dma_buffer,   // The initial read address
-      size,         // Number of transfers,
-      true          // Start immediately.
+  dma_channel_configure(channel,     // Channel to be configured
+                        config,      // The configuration we just created
+                        txfifo,      // The initial write address
+                        dma_buffer,  // The initial read address
+                        size,        // Number of transfers,
+                        true         // Start immediately.
   );
 }
 
 void StartDmaRx(PIO pio, int sm, int channel, dma_channel_config* config,
                 uint size) {
-        // enable DMA: coco writes become Rx inputs, get copied to dma_buffer.
-        channel_config_set_read_increment(config, false);
-        channel_config_set_write_increment(config, true);
-        channel_config_set_dreq(config,
-                                pio_get_dreq(pio, sm, /*is_tx*/ false));
+  // enable DMA: coco writes become Rx inputs, get copied to dma_buffer.
+  channel_config_set_read_increment(config, false);
+  channel_config_set_write_increment(config, true);
+  channel_config_set_dreq(config, pio_get_dreq(pio, sm, /*is_tx*/ false));
 
-        channel_config_set_transfer_data_size(config, DMA_SIZE_8);
-        channel_config_set_irq_quiet(config, true);
+  channel_config_set_transfer_data_size(config, DMA_SIZE_8);
+  channel_config_set_irq_quiet(config, true);
 
-        channel_config_set_enable(config, true);
+  channel_config_set_enable(config, true);
 
-        auto rxfifo = &pio->rxf[sm];
+  auto rxfifo = &pio->rxf[sm];
 
-        dma_channel_configure(channel,     // Channel to be configured
-                              config,      // The configuration we just created
-                              dma_buffer,  // The initial write address
-                              rxfifo,      // The initial read address
-                              size,        // Number of transfers
-                              true         // Start immediately.
-        );
+  dma_channel_configure(channel,     // Channel to be configured
+                        config,      // The configuration we just created
+                        dma_buffer,  // The initial write address
+                        rxfifo,      // The initial read address
+                        size,        // Number of transfers
+                        true         // Start immediately.
+  );
 }
 
 void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
@@ -305,17 +300,17 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
         // COCO READS n BYTES FROM MCP.
         uint n = octet;
         // printf("[%d]  %d: coco reads %d bytes\n", count, octet, n);
-        //printf("[%c,%c]\n", '0' + count, 'A' + octet);
+        // printf("[%c,%c]\n", '0' + count, 'A' + octet);
 
 #if 1
-// CONCERNING `PANIC: wanted 31 bytes from MCP, only 0 buffered.`
+        // CONCERNING `PANIC: wanted 31 bytes from MCP, only 0 buffered.`
 
         uint buffered;
         do {
-            if (TryGetByte(&octet)) {
-              McpBuf.Put(octet);
-            }
-            buffered = McpBuf.NumBytesBuffered();
+          if (TryGetByte(&octet)) {
+            McpBuf.Put(octet);
+          }
+          buffered = McpBuf.NumBytesBuffered();
         } while (buffered < n);
 
 #else
@@ -327,31 +322,29 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
         }
 #endif
 
-
-
         // GetBytesFromTether:
-//      printf("TX#%d (buf=%d)\n", n, buffered);
+        //      printf("TX#%d (buf=%d)\n", n, buffered);
         for (uint i = 0; i < n; i++) {
           dma_buffer[i] = McpBuf.Take();
-//        if (i<8) printf(" [%d]g%d ", i, dma_buffer[i]);
+          //        if (i<8) printf(" [%d]g%d ", i, dma_buffer[i]);
         }
-//      printf(" ok TX\n");
+        //      printf(" ok TX\n");
 
 #define DMA_TX 1
 #if DMA_TX
         StartDmaTx(pio, smR, channel, config, n);
 #else
-        //for (uint i = 0; i < n; i++) {
-            //FifoWaitAndPut(pio, smR, dma_buffer[i]);
+        // for (uint i = 0; i < n; i++) {
+        // FifoWaitAndPut(pio, smR, dma_buffer[i]);
         //}
-        //printf("TXd %d\n", n);
+        // printf("TXd %d\n", n);
 #endif
 
       } else if (101 <= octet && octet <= 200) {
         // COCO WRITES n BYTES TO MCP.
         uint n = octet - 100;
         // printf("[%d]  %d: coco writes %d bytes for MCP\n", count, octet, n);
-        //printf("[%c,%c]\n", '0' + count, 'a' + octet - 100);
+        // printf("[%c,%c]\n", '0' + count, 'a' + octet - 100);
 
         if (num_bytes_to_mcp != 0) {
           printf(
@@ -371,8 +364,8 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
       } else if (octet == 250) {
         // QUERY SIZE OF MCP IN BUFFER
         uint size = McpBuf.NumBytesBuffered();
-      //printf("[%d]  %d: querying size => %d from MCP buffered\n", count,
-             //octet, size);
+        // printf("[%d]  %d: querying size => %d from MCP buffered\n", count,
+        // octet, size);
 
         dma_buffer[0] = (byte)(size >> 8);
         dma_buffer[1] = (byte)(size >> 0);
@@ -382,16 +375,16 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
 #if DMA_TX
         StartDmaTx(pio, smR, channel, config, n);
 #else
-        //for (uint i = 0; i < n; i++) {
-            //FifoWaitAndPut(pio, smR, dma_buffer[i]);
+        // for (uint i = 0; i < n; i++) {
+        // FifoWaitAndPut(pio, smR, dma_buffer[i]);
         //}
-        //printf("TXd %d\n", n);
+        // printf("TXd %d\n", n);
 #endif
 
       } else if (octet == 251) {
         // PUSH num_bytes_to_mcp TO MCP.
-        //printf("[%d]  %d: Going to push %d bytes to MCP\n", count, octet,
-               //num_bytes_to_mcp);
+        // printf("[%d]  %d: Going to push %d bytes to MCP\n", count, octet,
+        // num_bytes_to_mcp);
 
         if (!(1 <= num_bytes_to_mcp && num_bytes_to_mcp <= 100)) {
           printf("Got octet %d (PUSH) but num_bytes_to_mcp is %d\n", octet,
@@ -399,10 +392,10 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
           Panic();
         }
 
-        //for (uint i = 0; i < num_bytes_to_mcp; i++) {
-          //printf(" %dp%d ", i, dma_buffer[i]);
+        // for (uint i = 0; i < num_bytes_to_mcp; i++) {
+        // printf(" %dp%d ", i, dma_buffer[i]);
         //}
-        //printf("\n");
+        // printf("\n");
 
         // First byte of the group is 128 plus the size of the payload.
         // Followed by that many payload bytes.
@@ -421,9 +414,9 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
       } else {
         printf("\n[%d] Panic: bad command byte %d\n", count, octet);
         Panic();
-      } // what octet
+      }  // what octet
 
-      FifoPut(pio, smS, 'b');             // Good Status is 'b' for bonobo.
+      FifoPut(pio, smS, 'b');  // Good Status is 'b' for bonobo.
 
       if (1 <= octet && octet <= 100) {
         const uint n = octet;
@@ -431,7 +424,7 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
         // NOT HERE // StartDmaTx(pio, smR, channel, config, n);
 #else
         for (uint i = 0; i < n; i++) {
-            FifoWaitAndPut(pio, smR, dma_buffer[i]);
+          FifoWaitAndPut(pio, smR, dma_buffer[i]);
         }
         // printf("TXd %d\n", n);
 #endif
@@ -443,14 +436,14 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
         // NOT HERE // StartDmaTx(pio, smR, channel, config, n);
 #else
         for (uint i = 0; i < n; i++) {
-            FifoWaitAndPut(pio, smR, dma_buffer[i]);
+          FifoWaitAndPut(pio, smR, dma_buffer[i]);
         }
         // printf("TXd %d\n", n);
 #endif
       }
 
 #if DMA_RX
-    // NOT HERE
+      // NOT HERE
 #else
       // NON-DMA-RX
       if (101 <= octet && octet <= 200) {
@@ -458,8 +451,8 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
         const uint n = octet - 100;
 
         for (uint i = 0; i < n; i++) {
-            uint x = FifoWaitAndGet(pio, smW);
-            dma_buffer[i] = (byte)x;
+          uint x = FifoWaitAndGet(pio, smW);
+          dma_buffer[i] = (byte)x;
         }
         printf("RX done %d\n", n);
       }
@@ -470,9 +463,8 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
       // LED(lit);
       // lit = !lit;
       count++;
-    } // if Try Fifo -> octet
+    }  // if Try Fifo -> octet
   }
-
 }
 
 void SpoonFeed(PIO pio) {
@@ -625,9 +617,11 @@ int main2() {
   stdio_usb_init();
   printf("*** HELLO BONOBO\n");
 
-  // Debugging: Put a distinctive pattern in dma_buffer, to see if it is changed.
+  // Debugging: Put a distinctive pattern in dma_buffer, to see if it is
+  // changed.
   for (uint i = 0; i < sizeof dma_buffer; i++) {
-    dma_buffer[i] = (byte)(i ^ 8); // counts 8 to 15, then 0 to 7, then 24 to 31...
+    dma_buffer[i] =
+        (byte)(i ^ 8);  // counts 8 to 15, then 0 to 7, then 24 to 31...
   }
 
   int channel = dma_claim_unused_channel(/*required*/ true);
@@ -643,7 +637,7 @@ int main2() {
 }  // main2
 
 int main() {
-    int x = setjmp(restart_jmp_buf);
-    if (x) printf("\n*** RESTART\n");
-    main2();
+  int x = setjmp(restart_jmp_buf);
+  if (x) printf("\n*** RESTART\n");
+  main2();
 }
