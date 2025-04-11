@@ -14,6 +14,9 @@
 #include <pico/stdlib.h>
 #include <pico/time.h>
 #include <stdio.h>
+#include <setjmp.h>
+
+jmp_buf restart_jmp_buf;
 
 // Bonobo 2.4 GPIO Pin Assignments
 // outputs:
@@ -203,6 +206,9 @@ void StartPortals(PIO pio) {
 
 void Panic() {
   printf("\nPanic!\n");
+
+  longjmp(restart_jmp_buf, 1);
+
   while (true) {
     // Triple blinking, a second apart.
     LED(1);
@@ -608,7 +614,10 @@ void InitializePins(PIO pio) {
   pio_sm_set_pins_with_mask(pio, sm, 0x5u << 16, 0xFu << 16);
 }
 
-int main() {
+int main2() {
+  McpBuf.Reset();
+  dma_unclaim_mask(0xFFF);
+
   const PIO pio = pio0;  // Only use pio0.
 
   InitializePins(pio);
@@ -631,4 +640,10 @@ int main() {
     OperatePortals(pio, channel, &config);
     StopPortals(pio);
   }
-}  // main
+}  // main2
+
+int main() {
+    int x = setjmp(restart_jmp_buf);
+    if (x) printf("\n*** RESTART\n");
+    main2();
+}
