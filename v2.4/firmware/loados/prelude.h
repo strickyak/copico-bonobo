@@ -3,18 +3,18 @@
 
 #define Cons ((gbyte*)0x0400)
 
-#define Pia0PortA     0xFF00u
-#define Pia0PortB     0xFF02u
-#define Pia1PortA     0xFF20u
-#define Pia1PortB     0xFF22u
+#define Pia0PortA 0xFF00u
+#define Pia0PortB 0xFF02u
+#define Pia1PortA 0xFF20u
+#define Pia1PortB 0xFF22u
 
-#define KEYBOARD_SENSE  Pia0PortA
-#define KEYBOARD_PROBE  Pia0PortB
+#define KEYBOARD_SENSE Pia0PortA
+#define KEYBOARD_PROBE Pia0PortB
 
 #define IRQVEC_COCO12 0x010Cu
-#define IRQVEC_COCO3  0xFEF7u
+#define IRQVEC_COCO3 0xFEF7u
 
-#define OPCODE_JMP_Extended  (gbyte)0x7E
+#define OPCODE_JMP_Extended (gbyte)0x7E
 
 typedef void (*gfunc)(void);
 
@@ -27,4 +27,4 @@ void memset_words(gword p, gword value, gword num_words);
 
 void ColdPrint(const char* s);
 
-#endif // _KERNEL_PRELUDE_H_
+#endif  // _KERNEL_PRELUDE_H_

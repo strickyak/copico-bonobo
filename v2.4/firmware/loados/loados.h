@@ -11,11 +11,14 @@ typedef unsigned char errnum;
 typedef unsigned int gword;
 typedef unsigned int size_t;
 
-// We hope this union is both an efficient and an expressive word joiner/splitter.
+// We hope this union is both an efficient and an expressive word
+// joiner/splitter.
 typedef union gWordOrBytes {
-    gword w;        // Access as a 2-Byte word, or
-    gbyte b[2];     // access as two bytes (b[0] & b[1]).
-    struct gHL { gbyte h, l; } hl;  // access as two bytes (hl.h & hl.l).
+  gword w;     // Access as a 2-Byte word, or
+  gbyte b[2];  // access as two bytes (b[0] & b[1]).
+  struct gHL {
+    gbyte h, l;
+  } hl;  // access as two bytes (hl.h & hl.l).
 } gwob;
 
 typedef void (*gfunc)(void);
@@ -27,10 +30,10 @@ typedef void (*gfunc)(void);
 #include <stdarg.h>  // You can write functions like `printf` with `...` args.
 
 #define gPeek1(ADDR) (*(volatile gbyte*)(gword)(ADDR))
-#define gPoke1(ADDR,VALUE) (*(volatile gbyte*)(gword)(ADDR) = (gbyte)(VALUE))
+#define gPoke1(ADDR, VALUE) (*(volatile gbyte*)(gword)(ADDR) = (gbyte)(VALUE))
 
 #define gPeek2(ADDR) (*(volatile gword*)(gword)(ADDR))
-#define gPoke2(ADDR,VALUE) (*(volatile gword*)(gword)(ADDR) = (gword)(VALUE))
+#define gPoke2(ADDR, VALUE) (*(volatile gword*)(gword)(ADDR) = (gword)(VALUE))
 
 // These do a gPeek1, some bit manipulaton, and a gPoke1.
 #define gPAND(ADDR, X) ((*(volatile gbyte*)(gword)(ADDR)) &= (gbyte)(X))
@@ -40,14 +43,15 @@ typedef void (*gfunc)(void);
 // If your ".bss" allocation of 128 bytes in Page 0 (the direct page)
 // fills up, you can mark some of the global variable definitions with
 // this attribute, to move those variables into a larger section.
-#define gZEROED      __attribute__ ((section (".data.more")))
+#define gZEROED __attribute__((section(".data.more")))
 
-#define gAssert(COND) if (!(COND)) gFatal(__FILE__, __LINE__)
+#define gAssert(COND) \
+  if (!(COND)) gFatal(__FILE__, __LINE__)
 
 void gFatal(const char* s, gword value);
 
 #define gDisableIrq() asm volatile("  orcc #$10")
-#define gEnableIrq()   asm volatile("  andcc #^$10")
+#define gEnableIrq() asm volatile("  andcc #^$10")
 gbyte gIrqSaveAndDisable();
 void gIrqRestore(gbyte cc_value);
 
@@ -66,9 +70,9 @@ void Bonobo_Init();
 // command.  n is the number of bytes to
 // immediately follow for the payload.
 struct quint {
-    gbyte cmd;
-    gword n;
-    gword p;
+  gbyte cmd;
+  gword n;
+  gword p;
 };
 
 void gNetworkLog(const char* s);
@@ -88,29 +92,29 @@ void Network_Init(void);
 #define NEKOT_LAUNCH 68
 
 // Cmd bytes from coco to MCP.
-#define NEKOT_KEYSCAN  69
-#define NEKOT_CONTROL  70
-#define NEKOT_GAMECAST  71
+#define NEKOT_KEYSCAN 69
+#define NEKOT_CONTROL 70
+#define NEKOT_GAMECAST 71
 
 // Cmd bytes inherited from Lemma.
 #define CMD_LOG 200
 #define CMD_DATA 204
 #define CMD_ECHO 217
 
-#define  NET_Send          BonoboSend
-#define  NET_RecvChunkTry  BonoboRecvChunkTry
-#define  NET_Init          Bonobo_Init
+#define NET_Send BonoboSend
+#define NET_RecvChunkTry BonoboRecvChunkTry
+#define NET_Init Bonobo_Init
 
 #define NOTYET 1
 
 // ----------------------
 
-#define gPin(A)  gPoke2(0, (A));
+#define gPin(A) gPoke2(0, (A));
 
 void RequestLoadOs();
 void Loop();
 
-#include "prelude.h"
 #include "console.h"
+#include "prelude.h"
 
-#endif // _FIRMWARE_LOAD_DECB_LOAD_H_
+#endif  // _FIRMWARE_LOAD_DECB_LOAD_H_
