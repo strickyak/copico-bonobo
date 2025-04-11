@@ -9,3 +9,6 @@ RCS/
 *.decb
 *.elf
 *.tmp
+
+__pycache__/
+build-*/
