@@ -151,7 +151,7 @@ class CircBuf {
     if (nextIn == N) nextIn = 0;
   }
 };
-CircBuf<20000> McpBuf;
+CircBuf<90000> McpBuf;
 
 void StopPortals(PIO pio) {
   constexpr uint smC = 0, smS = 1, smR = 2,
@@ -301,12 +301,28 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
         // printf("[%d]  %d: coco reads %d bytes\n", count, octet, n);
         //printf("[%c,%c]\n", '0' + count, 'A' + octet);
 
+#if 1
+// CONCERNING `PANIC: wanted 31 bytes from MCP, only 0 buffered.`
+
+        uint buffered;
+        do {
+            if (TryGetByte(&octet)) {
+              McpBuf.Put(octet);
+            }
+            buffered = McpBuf.NumBytesBuffered();
+        } while (buffered < n);
+
+#else
         uint buffered = McpBuf.NumBytesBuffered();
         if (buffered < n) {
           printf("PANIC: wanted %d bytes from MCP, only %d buffered.\n", n,
                  buffered);
           Panic();
         }
+#endif
+
+
+
         // GetBytesFromTether:
 //      printf("TX#%d (buf=%d)\n", n, buffered);
         for (uint i = 0; i < n; i++) {

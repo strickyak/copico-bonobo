@@ -37,7 +37,11 @@ void Loop() {
     gword p = gPeek2(quint+3);
     gPoke1(0xFF22, 0x00);  // 1-bit click
 
+    PutHex(cmd); PutChar('(');
+    PutHex(n); PutChar(',');
+    PutHex(p); PutChar(')');
     if (cmd == NEKOT_POKE) { // 66
+        ColdPrint("POKE");
         errnum e2;
         do {
             e2 = NET_RecvChunkTry((gbyte*)p, n);
@@ -46,6 +50,10 @@ void Loop() {
         if (e2) gFatal("E-P",e2);
 
     } else if (cmd == NEKOT_CALL) { // 67
+        ColdPrint("CALL");
+        Delay(10000);
+        //ColdPrint("....");
+        //Delay(50000);
         gAssert(n==0);
         gfunc fn = (gfunc)p;
         fn();
