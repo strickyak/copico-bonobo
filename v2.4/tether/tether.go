@@ -16,7 +16,6 @@ import (
 
 var WIRE = flag.String("wire", "/dev/ttyACM0", "serial device connected by USB to Pi Pico")
 var BAUD = flag.Uint("baud", 115200, "serial device baud rate")
-var FIRMWARE = flag.String("firmware", "nekotos-bonobo", "binary to load on startup")
 var MCP = flag.String("mcp", "localhost:2321", "global LEMMA server or MCP server or local test MCP server")
 
 var HANDLE = flag.String("handle", "ZZZ", "three-letter handle for this user.")
