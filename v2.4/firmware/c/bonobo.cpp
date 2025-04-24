@@ -43,8 +43,6 @@ jmp_buf restart_jmp_buf;
 #define G_WD 27
 #define G_RD 28
 
-// uint widebuf[100];
-
 extern "C" {
 extern int stdio_usb_in_chars(char* buf, int length);
 }
@@ -71,6 +69,8 @@ typedef unsigned int word;
 #include "read.pio.h"
 #include "status.pio.h"
 #include "write.pio.h"
+
+struct repeating_timer TimerData;
 
 // For USB Serial: PutByte & TryGetByte.
 
@@ -224,7 +224,47 @@ void Panic() {
   }
 }
 
-byte dma_buffer[111];
+bool TimerCallback(repeating_timer_t* rt) {
+  // NMI is Edge-Triggered, so exact timing is not important.
+  gpio_put(G_SPOON, 0);
+  gpio_put(G_NMI, 0);
+  sleep_us(1);
+  gpio_put(G_NMI, 1);
+  gpio_put(G_SPOON, 1);
+  return true;
+}
+
+void TimerStart() {
+  //---- thanks https://forums.raspberrypi.com/viewtopic.php?t=349809 ----//
+  //-- systick_hw->csr |= 0x00000007;  //Enable timer with interrupt
+  //-- systick_hw->rvr = 0x00ffffff;         //Set the max counter value (when
+  // the timer reach 0, it's set to this value)
+  //-- exception_set_exclusive_handler(SYSTICK_EXCEPTION, SysTickINT);
+  ////Interrupt
+
+  // ( pico-sdk/src/common/pico_time/include/pico/time.h )
+  // Note: typedef bool (*repeating_timer_callback_t)(repeating_timer_t *rt);
+  // Note: static inline bool add_repeating_timer_ms(int32_t delay_ms,
+  // repeating_timer_callback_t callback, void *user_data, repeating_timer_t
+  // *out)
+
+  //       round 1000000 / 60
+  // 16667
+
+  //       round 1000000 / 2000
+  // 500
+
+  OutPin(G_CART, 1);
+  OutPin(G_NMI, 1);
+  OutPin(G_HALT, 1);
+  OutPin(G_RESET, 1);
+  OutPin(G_SPOON, 1);
+
+  alarm_pool_init_default();
+  add_repeating_timer_us(500 /* 2000 Hz */, TimerCallback, nullptr, &TimerData);
+}
+
+byte dma_buffer[555];  // Max is supposed to be 64-ish.
 
 void StartDmaTx(PIO pio, int sm, int channel, dma_channel_config* config,
                 uint size) {
@@ -410,6 +450,10 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
         // Bonobo Presence Query
         // printf("\n[%d] Probe 252->'b'\n", count);
         McpBuf.Reset();
+
+      } else if (octet == 249) {
+        // Start the Timer
+        TimerStart();
 
       } else {
         printf("\n[%d] Panic: bad command byte %d\n", count, octet);
