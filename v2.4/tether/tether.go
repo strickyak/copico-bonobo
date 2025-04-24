@@ -103,13 +103,26 @@ func logHex(prefix string, bb []byte) {
 	}
 }
 
-func loopFromMcpToWire() {
+func tryOnceFromMcpToWire() {
+	defer func() {
+		r := recover()
+		if r != nil {
+			Logf("[recover: panic: %v]", r)
+		}
+		time.Sleep(1 * time.Second)
+	}()
+
 	const N = 4096
 	var bb [N]byte
+
+	count := Value(mcp.Read(bb[:]))
+	Value(wire.Write(bb[:count]))
+	logHex("mcp>", bb[:count])
+}
+
+func loopFromMcpToWire() {
 	for {
-		count := Value(mcp.Read(bb[:]))
-		Value(wire.Write(bb[:count]))
-		logHex("mcp", bb[:count])
+		tryOnceFromMcpToWire()
 	}
 }
 
