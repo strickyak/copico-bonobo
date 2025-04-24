@@ -43,7 +43,18 @@ void Loop() {
   PutChar(',');
   PutHex(p);
   PutChar(')');
-  if (cmd == NEKOT_POKE) {  // 66
+  if (cmd == NEKOT_MEMCPY) {  // 65
+    ColdPrint("MEMCPY");
+    errnum e2;
+    gword ww[3];
+    do {
+      e2 = NET_RecvChunkTry((gbyte*)ww, 6);
+    } while (e2 == NOTYET);
+
+    if (e2) gFatal("E-P", e2);
+    memcpy(ww[0], ww[1], ww[2]);
+
+  } else if (cmd == NEKOT_POKE) {  // 66
     ColdPrint("POKE");
     errnum e2;
     do {
