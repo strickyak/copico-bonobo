@@ -1,0 +1,29 @@
+Use these instead of the simple "tether" program,
+    for these specific Operating Systems.
+
+These programs all take the same dash options;
+    use --help for help.
+
+* For a 32-bit Linux on Intel:
+    tether.linux-386.exe
+
+* For a 64-bit Linux on Intel:
+    tether.linux-amd64.exe
+
+* For a 64-bit Raspberry Pi OS:
+    tether.linux-arm64.exe
+
+* For a 32-bit Raspberry Pi OS:
+    tether.linux-arm-7.exe
+
+* For older MacOS on Intel:
+    tether.mac-amd64.exe
+
+* For newer MacOS on Apple Silicon (M1, M2, M3, M4...):
+    tether.mac-arm64.exe
+
+* For 32-bit Windows:
+    tether.win-386.exe
+
+* For 64-bit Windows:
+    tether.win-amd64.exe
