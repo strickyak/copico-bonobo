@@ -246,7 +246,8 @@ bool TimerCallback(repeating_timer_t* rt) {
   return true;
 }
 
-void TimerStart() {
+bool timer_is_running;
+void TimerStart(uint micros) {
   //---- thanks https://forums.raspberrypi.com/viewtopic.php?t=349809 ----//
   //-- systick_hw->csr |= 0x00000007;  //Enable timer with interrupt
   //-- systick_hw->rvr = 0x00ffffff;         //Set the max counter value (when
@@ -266,14 +267,27 @@ void TimerStart() {
   //       round 1000000 / 2000
   // 500
 
+  // TODO -- paranoid? Make sure GPIO owns these pins.
   OutPin(G_CART, 1);
   OutPin(G_NMI, 1);
   OutPin(G_HALT, 1);
   OutPin(G_RESET, 1);
   OutPin(G_SPOON, 1);
 
-  alarm_pool_init_default();
-  add_repeating_timer_us(500 /* 2000 Hz */, TimerCallback, nullptr, &TimerData);
+  if (micros) {
+    // micros is positive -- set the timer.
+    if (!timer_is_running) { // idempotent
+        alarm_pool_init_default();
+        add_repeating_timer_us(micros, TimerCallback, nullptr, &TimerData);
+        timer_is_running = true;
+    }
+  } else {
+    // micros is 0 -- cancel the timer.
+    if (timer_is_running) { // idempotent
+        cancel_repeating_timer(&TimerData);
+        timer_is_running = false;
+    }
+  }
 }
 
 byte dma_buffer[555];  // Max is supposed to be 64-ish.
@@ -327,7 +341,7 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
   constexpr uint smC = 0, smS = 1, smR = 2,
                  smW = 3;  // control, status, read, & write.
   int count = 0;
-  uint num_bytes_to_mcp = 0;
+  uint num_bytes_from_coco = 0;
 
   while (true) {
     byte octet;
@@ -372,17 +386,17 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
         // printf("[%d]  %d: coco writes %d bytes for MCP\n", count, octet, n);
         // printf("[%c,%c]\n", '0' + count, 'a' + octet - 100);
 
-        if (num_bytes_to_mcp != 0) {
+        if (num_bytes_from_coco != 0) {
           printf(
-              "Got octet %d but num_bytes_to_mcp is %d and it should be "
+              "Got octet %d but num_bytes_from_coco is %d and it should be "
               "zero.\n",
-              octet, num_bytes_to_mcp);
+              octet, num_bytes_from_coco);
           Panic();
         }
 
         StartDmaRx(pio, smW, channel, config, n);
 
-        num_bytes_to_mcp = n;
+        num_bytes_from_coco = n;
 
       } else if (octet == 250) {
         // QUERY SIZE OF MCP IN BUFFER
@@ -395,22 +409,22 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
         StartDmaTx(pio, smR, channel, config, n);
 
       } else if (octet == 251) {
-        // PUSH num_bytes_to_mcp TO MCP.
+        // PUSH num_bytes_from_coco TO MCP.
 
-        if (!(1 <= num_bytes_to_mcp && num_bytes_to_mcp <= 100)) {
-          printf("Got octet %d (PUSH) but num_bytes_to_mcp is %d\n", octet,
-                 num_bytes_to_mcp);
+        if (!(1 <= num_bytes_from_coco && num_bytes_from_coco <= 100)) {
+          printf("Got octet %d (PUSH) but num_bytes_from_coco is %d\n", octet,
+                 num_bytes_from_coco);
           Panic();
         }
 
         // First byte of the group is 128 plus the size of the payload.
         // Followed by that many payload bytes.
-        PutByte(128 + num_bytes_to_mcp);
+        PutByte(128 + num_bytes_from_coco);
         // Now send that many data bytes.
-        for (uint i = 0; i < num_bytes_to_mcp; i++) {
+        for (uint i = 0; i < num_bytes_from_coco; i++) {
           PutByte(dma_buffer[i]);
         }
-        num_bytes_to_mcp = 0;
+        num_bytes_from_coco = 0;
 
       } else if (octet == 252) {
         // Bonobo Presence Query
@@ -418,8 +432,15 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
         McpBuf.Reset();
 
       } else if (octet == 249) {
-        // Start the Timer
-        TimerStart();
+        // Start the 2000 Hz Timer
+        TimerStart(500 /* 2000 Hz */);
+
+      } else if (octet == 248) {
+        // Start the Programmable Timer,
+        // First, use command 102 to write 2 bytes to the dma_buffer.
+        uint micros = (((uint)dma_buffer[0]) << 8) + (uint)dma_buffer[1];
+        TimerStart(micros);
+        num_bytes_from_coco = 0;
 
       } else {
         printf("\n[%d] Panic: bad command byte %d\n", count, octet);
