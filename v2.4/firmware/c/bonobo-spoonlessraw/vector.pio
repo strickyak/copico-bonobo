@@ -1,0 +1,52 @@
+; on_reset.pio -- for bonobo 2.4 -- strick
+; SPDX-License-Identifier: MIT
+
+;; E_PIN = 21
+
+.program vector_pio
+.side_set 4 opt
+
+    ; synchronize on a full pulse of E
+    wait    1 gpio, 21    ; wait until E hi
+    wait    0 gpio, 21    ; wait until E lo
+
+    set     x, 3        side 0b0111 ; all=no (unhalts)
+four_times:
+    wait    1 gpio, 21
+    wait    0 gpio, 21
+    jmp     x--, four_times
+
+    out     pindirs, 8  side 0b0010  ; spoon=Yes slenb=Yes dir=Out
+    out     pins, 8
+    wait    1 gpio, 21
+    wait    0 gpio, 21
+    out     pins, 8
+    wait    1 gpio, 21    side 0b0000  ; unhalt early for 6809
+    wait    0 gpio, 21
+    out     pindirs, 8    side 0b0101   ; spoon=Yes halt=Yes
+
+loop_forever:
+    jmp     loop_forever    ; until pio_sm_exec(pioSF, smF, offsetF)
+
+% c-sdk {
+
+void vector_program_init(PIO pio, uint sm, uint offset) {
+
+   pio_sm_config cf = vector_pio_program_get_default_config(offset);
+   sm_config_set_clkdiv(&cf, /*CLOCK_DIVISOR*/ 1);
+
+   // OUT:
+   const bool OUT_SHIFT_RIGHT = true;
+   const bool AUTOPULL = true;
+   const uint PULL_THRESHOLD = 32;
+   sm_config_set_out_shift(&cf, OUT_SHIFT_RIGHT, AUTOPULL, PULL_THRESHOLD);
+
+   // SIDE:
+   sm_config_set_sideset_pins(&cf, G_DIR); // then G_HALT, G_SLENB, and G_SPOON.
+
+   pio_sm_restart(pio, sm);
+   pio_sm_init(pio, sm, offset, &cf);  // Apply the config.
+   pio_sm_exec(pio, sm, offset);       // Reset PC, but don't run yet.
+}
+
+%}

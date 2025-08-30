@@ -1,8 +1,60 @@
+#ifndef SPOONLESS
+-------- must define SPOONLESS ----------------
+#endif
+
 // bonobo.cpp -- for the Copico-Bonobo v2.4 -- strick@yak.net
 //
 // SPDX-License-Identifier: MIT
 
-// HINT: $ minicom -b 115200 -D /dev/ttyACM0
+// OBSOLETE DEBUGGING HINT: $ minicom -b 115200 -D /dev/ttyACM0
+
+/*
+
+*** FUTURE ***
+
+brainstorming: how to get a short command from the PC,
+whether to spoonfeed or not.
+
+Since we still need the USB-tethered PC(win,mac,linux,pi) to do
+anything useful, we can take a command from the PC whether
+to spoonfeed any boot file, or let the Coco boot on its own.
+
+How about an 8-byte packet, which is a 5-byte sync pattern
+(a standard Quint header) with a 3-byte payload.
+
+    cmd=241 n=(0 3) p=(9 27)  :  [ 16 <16> 16 ]
+
+We can change that middle <16> for boot options.
+
+16: Query: we have not received our boot command yet.
+17: Don't spoonfeed.
+18: Spoonfeed built-in program ("LoadOS")
+19: Spoonfeed a program
+
+If we spew 8 of the 8-byte packets (that's 64 bytes)
+every half a second, then we'll flush any pending
+256-byte-ish payloads in a couple of seconds.
+Any bytes except the cmd=241 will be 0..31 control
+characters, which are pretty harmless, if the channel
+is Quint-based with transparent 7-bit ASCII.  (is it?)
+
+Notice
+      else if (octet == 252)
+        // Bonobo Presence Query
+
+should this be modeled as "Tether Presence Query"
+and a result byte?
+
+Who does the "Bonobo Presence Query" and why?
+Is it for OS9 device init?
+Is it used by NekotOS device init?
+
+Maybe this Query gets too complicated,
+and I should make it work first by just using ifdef.
+
+*** END FUTURE ***
+
+*/
 
 #include <hardware/clocks.h>
 #include <hardware/dma.h>
@@ -52,7 +104,7 @@ extern int stdio_usb_in_chars(char* buf, int length);
 typedef unsigned char byte;
 typedef unsigned int word;
 
-#include "_loados.decb.h"
+#include "../build-c/_loados.decb.h"
 
 #include "bootdata.h"
 //
@@ -212,10 +264,17 @@ void StartPortals(PIO pio) {
 }
 
 void Panic() {
-  printf("\nPanic!\nLONGJMP\n");
+  printf("\nPanic!\n");
+  sleep_ms(100);
 
-  // New: Restart on Panic.
-  longjmp(restart_jmp_buf, 1);
+  // printf("LONGJMP\n");
+  // sleep_ms(100);
+
+  // // New: Restart on Panic.
+  // longjmp(restart_jmp_buf, 1);
+
+  printf("STUCK\n");
+  sleep_ms(100);
 
   // Old: Triple Blinks to indicate Panic.
   while (true) {
@@ -271,8 +330,8 @@ void TimerStart(uint micros) {
   OutPin(G_CART, 1);
   OutPin(G_NMI, 1);
   OutPin(G_HALT, 1);
-  OutPin(G_RESET, 1);
   OutPin(G_SPOON, 1);
+  InPin(G_RESET);
 
   if (micros) {
     // micros is positive -- set the timer.
@@ -346,11 +405,13 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
   while (true) {
     byte octet;
 
+#if !SPOONLESS
     bool reset = gpio_get(G_RESET);
     if (reset == false) {  // Active Low
       printf("\nOperate got RESET\n");
       break;
     }
+#endif
 
     ////////////// From MCP
     // Attempt to get a byte from the MCP.
@@ -361,6 +422,7 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
     ////////////// From COCO
 
     if (TryFifoGet(pio, smC, &octet)) {  // octet <- byte via Control Write
+      // printf("Command=%d\n");
 
       if (1 <= octet && octet <= 100) {
         // COCO READS n BYTES FROM MCP.
@@ -428,12 +490,12 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
 
       } else if (octet == 252) {
         // Bonobo Presence Query
-        // printf("\n[%d] Probe 252->'b'\n", count);
+        printf("\n[%d] Probe 252->'b'\n", count);
         McpBuf.Reset();
 
-      } else if (octet == 249) {
+      } else if (octet == 249) { // OBSOLETE?
         // Start the 2000 Hz Timer
-        TimerStart(500 /* 2000 Hz */);
+        TimerStart(500 /* 2000 Hz */); // OBSOLETE?
 
       } else if (octet == 248) {
         // Start the Programmable Timer,
@@ -449,6 +511,7 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
 
       FifoPut(pio, smS, 'b');  // Good Status is 'b' for bonobo.
 
+#if 0 // this makes no sense:
       if (1 <= octet && octet <= 100) {
         const uint n = octet;
       }
@@ -456,17 +519,19 @@ void OperatePortals(PIO pio, int channel, dma_channel_config* config) {
       if (octet == 250) {
         const uint n = 2;
       }
+#endif
 
       count++;
     }  // if TryFifoGet -> octet
   } // while true
 } // OperatePortals
 
-void SpoonFeed(PIO pio) {
+void SpoonFeed(PIO pio, bool spoonless) {
   constexpr uint sm = 0;  // Only uses sm0.
 
   bool reset;
   bool led = false;
+  printf("SpoonFeed: Waiting for reset.\n");
   do {
     led = !led;
     SetLED(led);      // toggle the LED
@@ -494,6 +559,8 @@ void SpoonFeed(PIO pio) {
 
   sleep_ms(400);  // Time for other hardware to reset.
   printf(" Slept.\n");
+
+  if (!spoonless) {
 
   ///////////////////////////////
   //
@@ -555,6 +622,8 @@ void SpoonFeed(PIO pio) {
     sleep_us(20);  // long enough for unhalting & two instructions.
     pio_sm_set_enabled(pio, sm, false);  // Stop.
   }
+
+  } // endif !spoonless
 
   // void pio_sm_set_pins_with_mask (PIO pio, uint sm, uint32_t pin_values,
   // uint32_t pin_mask) Raise HALT and SPOON to 1.
@@ -623,7 +692,11 @@ int main2() {
   dma_channel_config config = dma_channel_get_default_config(channel);
 
   while (true) {
-    SpoonFeed(pio);
+#if SPOONLESS
+    SpoonFeed(pio, /*spoonless=*/true);
+#else
+    SpoonFeed(pio, /*spoonless=*/false);
+#endif
 
     StartPortals(pio);
     OperatePortals(pio, channel, &config);

@@ -20,7 +20,7 @@ extern int stdio_usb_in_chars(char* buf, int length);
 }
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
-#define force_inline inline __attribute__((always_inline))
+#define always_inline inline __attribute__((always_inline))
 
 typedef unsigned char byte;
 typedef unsigned int word;

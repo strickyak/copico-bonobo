@@ -1,4 +1,4 @@
-set(PROJECT bonobo)
+set(PROJECT bonobo-spoonlessraw)
 cmake_minimum_required(VERSION 3.12)
 include($ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake)
 project(${PROJECT} C CXX ASM)
@@ -6,7 +6,7 @@ project(${PROJECT} C CXX ASM)
 set(PICO_BOARD pico)
 pico_sdk_init()
 
-add_executable(${PROJECT} bonobo.cpp)
+add_executable(${PROJECT} bonobo-spoonlessraw.cpp)
 pico_generate_pio_header(${PROJECT}  ${CMAKE_CURRENT_LIST_DIR}/vector.pio)
 pico_generate_pio_header(${PROJECT}  ${CMAKE_CURRENT_LIST_DIR}/spoon.pio)
 pico_generate_pio_header(${PROJECT}  ${CMAKE_CURRENT_LIST_DIR}/control.pio)
@@ -14,7 +14,7 @@ pico_generate_pio_header(${PROJECT}  ${CMAKE_CURRENT_LIST_DIR}/status.pio)
 pico_generate_pio_header(${PROJECT}  ${CMAKE_CURRENT_LIST_DIR}/read.pio)
 pico_generate_pio_header(${PROJECT}  ${CMAKE_CURRENT_LIST_DIR}/write.pio)
 
-target_sources(${PROJECT} PRIVATE bonobo.cpp bootdata.h _loados.decb.h)
+target_sources(${PROJECT} PRIVATE bonobo-spoonlessraw.cpp ../bonobo.h ../bootdata.h ../../build-c/_loados.decb.h)
 target_link_libraries(${PROJECT} PRIVATE pico_stdlib hardware_pio hardware_dma)
 pico_add_extra_outputs(${PROJECT})
 

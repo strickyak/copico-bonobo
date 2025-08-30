@@ -1,0 +1,50 @@
+; status.pio -- for the Copico Bonobo 2.4
+;
+; SPDX-License-Identifier: MIT
+
+; READ_CONTROL = 26  // means READ_STATUS
+
+.program status_pio
+.side_set 1 opt
+    set x, 31                 ; Used if status is not ready yet; try again.
+
+.wrap_target
+    mov osr, null    side 1  ; become inputs
+    out pindirs, 8         
+
+    wait 0 gpio 26           ; wait for READ STATUS strobe -----------------------
+
+    mov osr, ~ null          ; become outputs
+    out pindirs, 8         
+
+    pull noblock     side 0  ; byte from FIFO, or 0 from X
+    out pins, 8      side 0
+
+    wait 1 gpio 26           ; wait for strobe to finish -------
+    nop           [3]
+
+.wrap
+
+% c-sdk {
+
+void status_pio_init(PIO pio, uint sm, uint offset) {
+
+   pio_sm_config cf = status_pio_program_get_default_config(offset);
+   sm_config_set_clkdiv(&cf, 1);  // CLOCK DIVISOR
+
+   // SIDE:
+   sm_config_set_sideset_pin_base(&cf, 16);  // Pin 16 == Direction.
+
+   // OUT:
+   sm_config_set_out_pins(&cf, /*base*/8, /*count*/8);
+   const bool OUT_SHIFT_RIGHT = true;
+   const bool AUTOPULL = false;
+   const uint PULL_THRESHOLD = 8; // unused.
+   sm_config_set_out_shift(&cf, OUT_SHIFT_RIGHT, AUTOPULL, PULL_THRESHOLD);
+
+   pio_sm_restart(pio, sm);
+   pio_sm_init(pio, sm, offset, &cf);
+   pio_sm_exec(pio, sm, offset);
+}
+
+%}
