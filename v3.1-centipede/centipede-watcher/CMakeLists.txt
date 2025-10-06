@@ -1,6 +1,5 @@
 set(PROJECT centipede-watcher)
 cmake_minimum_required(VERSION 3.12)
-#xset(PICO_BOARD pico2)
 set(PICO_BOARD solderparty_rp2350_stamp_xl)
 set(PICO_PLATFORM rp2350)
 

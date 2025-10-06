@@ -15,8 +15,8 @@
 #define G_D0 0
 #define G_A0 32
 
-#define LED_PIN 25
-#define SET_LED(X) gpio_put(LED_PIN, (X))
+#define G_LED 25
+#define SET_LED(X) gpio_put(G_LED, (X))
 
 #define CYCLES_TO_CAPTURE 1024
 uint64_t Capture[CYCLES_TO_CAPTURE];
@@ -34,8 +34,8 @@ void OutPin(int pin, bool value) {
 
 void InitializePins() {
     // LED off.
-    gpio_init(LED_PIN);
-    gpio_set_dir(LED_PIN, GPIO_OUT);
+    gpio_init(G_LED);
+    gpio_set_dir(G_LED, GPIO_OUT);
     SET_LED(0);
 
     for (uint i = 0; i <= 22; i++) {
