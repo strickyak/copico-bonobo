@@ -1,0 +1,17 @@
+~/modoc/coco-shelf/copico-bonobo/v3.1-centipede/centipede-watcher
+
+ ================================================================
+
+ /tmp/centi:
+
+  2075  cmake ~/modoc/coco-shelf/copico-bonobo/v3.1-centipede/centipede-watcher
+ 2076  PICO_EXAMPLES_PATH=/dev/null PICO_SDK_PATH=/home/strick/modoc/coco-shelf/pico-sdk PICOTOOL_FETCH_FROM_GIT_PATH=/home/strick/modoc/coco-shelf/picotool/ make  && cp -v centipede-watcher.uf2 /media/strick/RP2350
+ 2077  cmake ~/modoc/coco-shelf/copico-bonobo/v3.1-centipede/centipede-watcher
+ 2078  PICO_EXAMPLES_PATH=/dev/null PICO_SDK_PATH=/home/strick/modoc/coco-shelf/pico-sdk PICOTOOL_FETCH_FROM_GIT_PATH=/home/strick/modoc/coco-shelf/picotool/ make -B  && cp -v centipede-watcher.uf2 /media/strick/RP2350
+ 2079  PICO_EXAMPLES_PATH=/dev/null PICO_SDK_PATH=/home/strick/modoc/coco-shelf/pico-sdk PICOTOOL_FETCH_FROM_GIT_PATH=/home/strick/modoc/coco-shelf/picotool/ make  && cp -v centipede-watcher.uf2 /media/strick/RP2350
+
+================================================================
+
+~/modoc/coco-shelf/tfr9/v3
+
+ 2125  ./generated/tconsole.linux-amd64.exe  --disks=/dev/null      -abslists ../../toolshed/cocoroms/bas13.rom.list,/home/strick/modoc/coco-shelf/toolshed/cocoroms/extbas11.rom.list -no_modules  2>_log       /tmp/coco2.0x8000.rom coco2-vectors-6309.0xfff0.rom | tee _tty
