@@ -1,0 +1,173 @@
+#include <hardware/clocks.h>
+// #include <hardware/dma.h>
+#include <hardware/pio.h>
+// #include <hardware/structs/systick.h>
+// #include <hardware/timer.h>
+#include <pico/stdlib.h>
+#include <pico/time.h>
+#include <pico/multicore.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <setjmp.h>
+#include <stdio.h>
+#include <arm_acle.h>
+#include <cmsis_gcc.h>
+
+#ifdef __cplusplus
+}
+#endif
+
+using byte = uint8_t;
+
+#include "watch.pio.h"
+
+#define G_RW 20
+#define G_E  21
+#define G_Q  22
+
+#define G_D0 0
+#define G_A0 32
+
+#define G_LED  25 // 27 // 28 // 25
+#define SET_LED(X) gpio_put(G_LED, (X))
+
+#include <array>
+#include <atomic>
+#include <cstdint>
+
+void InitializePins() {
+    for (uint i = 0; i <= 22; i++) {
+        gpio_init(i);
+        gpio_set_dir(i, GPIO_IN);
+        gpio_set_pulls(i, false, false);
+    }
+#if 1
+    for (uint i = 25; i <= 29; i++) {
+        // 25=(LED), 26=/NMI, 27=/RESET, 28=/HALT, 29=/SLENB
+        //gpio_put(i, 1);
+        gpio_init(i);
+        //gpio_put(i, 1);
+        //gpio_set_dir(i, GPIO_OUT);
+        //gpio_put(i, 1);
+        gpio_set_dir(i, GPIO_IN);
+        gpio_set_pulls(i, /*up=*/true, /*down=*/false);
+    }
+#else
+    // 25=(LED), 26=/NMI, 27=/RESET, 28=/HALT, 29=/SLENB
+    // uint mask = (1u << 26) | (1u << 27) | (1u << 28) | (1u << 29);
+    // sio_hw->gpio_oe_set = mask;
+    // sio_hw->gpio_set = mask;
+    // sio_hw->gpio_oe_set = 0x3C000000;
+    // sio_hw->gpio_set = 0x3C000000;
+#endif
+    for (uint i = 30; i <= 47; i++) {
+        gpio_init(i);
+        gpio_set_dir(i, GPIO_IN);
+        gpio_set_pulls(i, false, false);
+    }
+
+    // LED off.
+    gpio_init(G_LED);
+    gpio_set_dir(G_LED, GPIO_OUT);
+    SET_LED(0);
+}
+
+void SendRamletFifo(uint addr, byte data) {
+    multicore_fifo_push_blocking((addr << 16)| data);
+}
+
+void core1_main_fifo() {
+    while (true) {
+        putchar('(');
+        uint x = multicore_fifo_pop_blocking();
+        putchar(')');
+        putchar_raw(195);
+        putchar_raw(byte(x >> 16));
+        putchar_raw(byte(x >> 8));
+        putchar_raw(byte(x));
+    }
+}
+
+constexpr uint N = 40000;
+uint64_t Record[N];
+byte Before[N];
+byte After[N];
+
+int core0_main() {
+  bool active= false;
+  uint i = 0;
+  while (true) {
+    uint before = 0;
+    while (gpio_get(G_E) == 0) { before++; }
+    if (false && before < 3) {
+        printf("\nSPIN %d, for (gpio_get(G_E) == 0)\n", before);
+        while (1) {}
+    }
+    if (i >= N) break;
+    uint64_t pins = 0;
+    uint after = 0;
+    while (gpio_get(G_E) == 1) { pins = gpio_get_all64(); after++; }
+    if (false && after < 3) {
+        printf("\nSPIN %d, for (gpio_get(G_E) == 1)\n", after);
+        while (1) {}
+    }
+
+    byte data = (byte)pins;
+    uint16_t addr = (uint16_t)(pins>>32);
+    if (addr == 0xFFFE) active=1;
+    if (!active) continue;
+
+    // if ((pins & (1u << G_RW)) != 0) continue;
+
+#if 0
+    // if (addr == 0x5F0 && data==0x60) active= true;
+
+    if (addr < 0x0400) continue;
+    if (addr >= 0x0600 && addr < 0xFF00) continue;
+#endif
+    Before[i] = before;
+    After[i] = after;
+    Record[i++] = pins;
+  }
+
+  printf("\nPLAYBACK\n");
+  for (i = 0; i < N; i++) {
+      // putchar_raw(Record[i] >> 24);
+      // putchar_raw(Record[i] >> 16);
+      // putchar_raw(Record[i] >>  8);
+      // putchar_raw(Record[i] >>  0);
+      printf("%05d: %04x %c %02x  (%d,%d)\n",
+              i,
+              0xFFFF & (uint)(Record[i]>>32),
+              (((Record[i]>>20)&1)==0) ? 'w' : 'r',
+              (uint)(255 & Record[i]),
+              Before[i], After[i]);
+  }
+  printf("\nDONE\n");
+
+  while (1) {}
+
+}
+int main() {
+  InitializePins();
+  pio_set_gpio_base(pio0, 0);  // map to GPIO 0 to 31
+  pio_set_gpio_base(pio1, 16);  // map to GPIO 16 to 47
+ 
+  /*
+  uint offset3 = pio_add_program(pio0, &cpu_controls_program);
+  cpu_controls_program_init(pio0, 3, offset3);
+  pio_sm_put_blocking(pio0, 3, 15);  // change it
+  pio_sm_get_blocking(pio0, 3);   // wait for it
+*/
+
+  // set_sys_clock_khz(250000, true);  // overclock
+  stdio_usb_init();
+  sleep_ms(100);
+  printf("\n*** This is Centipede.\n");
+
+  // multicore_launch_core1(core1_main_fifo);
+  core0_main();
+}

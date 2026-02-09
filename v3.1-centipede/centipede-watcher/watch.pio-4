@@ -1,0 +1,77 @@
+.program watch_data_pio_0
+
+// E is pin 21
+
+.wrap_target
+   wait 1 gpio 21    ; wait for Rise of E
+   irq next set 4    ; raise irq 4 in pio_1
+
+   nop    [31]
+   wait 0 gpio 21    ; wait for Fall of E
+   in pins, 32       ; data is valid now
+   nop    [31]
+.wrap
+
+
+.program watch_addr_pio_1
+
+.wrap_target
+    wait irq 4       ; auto clears irq 4 afterwards
+    in pins, 32
+    nop    [31]
+.wrap
+
+
+% c-sdk {
+
+void watch_data_pio_0_program_init(PIO pio, uint sm, uint offset) {
+
+  constexpr uint CLOCK_DIVISOR = 1;
+  // D0:7
+  pio_sm_set_consecutive_pindirs(pio, sm, 0, 8, false/*in*/);
+  // R/W, E, Q.
+  pio_sm_set_consecutive_pindirs(pio, sm, 20, 3, false/*in*/);
+
+   pio_sm_config cf = watch_data_pio_0_program_get_default_config(offset);
+  sm_config_set_in_pins(&cf, 0);
+   sm_config_set_clkdiv(&cf, CLOCK_DIVISOR);
+   sm_config_set_fifo_join(&cf, PIO_FIFO_JOIN_RX);
+
+   const bool IN_SHIFT_RIGHT = false;
+   const bool AUTOPUSH = true;
+   const uint PUSH_THRESHOLD = 32;
+   sm_config_set_in_shift(&cf, IN_SHIFT_RIGHT, AUTOPUSH, PUSH_THRESHOLD);
+
+  pio_set_gpio_base(pio, 0);  // map to GPIO 0 to 31
+   pio_sm_init(pio, sm, offset, &cf);
+   pio_sm_exec(pio, sm, offset);
+   pio_sm_set_enabled(pio, sm, true);
+}
+
+void watch_addr_pio_1_program_init(PIO pio, uint sm, uint offset) {
+  pio_set_gpio_base(pio, 16);  // map to GPIO 16 to 47
+
+  constexpr uint CLOCK_DIVISOR = 1;
+  // A0:15
+  pio_sm_set_consecutive_pindirs(pio, sm, 16, 16, false/*in*/);
+
+   pio_sm_config cf = watch_addr_pio_1_program_get_default_config(offset);
+   sm_config_set_in_pins(&cf, 0);
+   sm_config_set_clkdiv(&cf, CLOCK_DIVISOR);
+   sm_config_set_fifo_join(&cf, PIO_FIFO_JOIN_RX);
+
+   const bool IN_SHIFT_RIGHT = false;
+   const bool AUTOPUSH = true;
+   const uint PUSH_THRESHOLD = 32;
+   sm_config_set_in_shift(&cf, IN_SHIFT_RIGHT, AUTOPUSH, PUSH_THRESHOLD);
+
+  pio_set_gpio_base(pio, 16);  // map to GPIO 16 to 47
+   pio_sm_init(pio, sm, offset, &cf);
+  pio_set_gpio_base(pio, 16);  // map to GPIO 16 to 47
+   pio_sm_exec(pio, sm, offset);
+  pio_set_gpio_base(pio, 16);  // map to GPIO 16 to 47
+   pio_sm_set_enabled(pio, sm, true);
+  pio_set_gpio_base(pio, 16);  // map to GPIO 16 to 47
+}
+
+%}

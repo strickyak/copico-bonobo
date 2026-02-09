@@ -1,0 +1,162 @@
+#include <hardware/clocks.h>
+// #include <hardware/dma.h>
+#include <hardware/pio.h>
+// #include <hardware/structs/systick.h>
+// #include <hardware/timer.h>
+#include <pico/stdlib.h>
+#include <pico/time.h>
+#include <pico/multicore.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <setjmp.h>
+#include <stdio.h>
+#include <arm_acle.h>
+#include <cmsis_gcc.h>
+
+#ifdef __cplusplus
+}
+#endif
+
+using byte = uint8_t;
+
+#include "watch.pio.h"
+
+#define G_RW 20
+#define G_E  21
+#define G_Q  22
+
+#define G_D0 0
+#define G_A0 32
+
+#define G_LED  25 // 27 // 28 // 25
+#define SET_LED(X) gpio_put(G_LED, (X))
+
+#include <array>
+#include <atomic>
+#include <cstdint>
+
+void InitializePins() {
+    for (uint i = 0; i <= 22; i++) {
+        gpio_init(i);
+        gpio_set_dir(i, GPIO_IN);
+        gpio_set_pulls(i, false, false);
+    }
+    for (uint i = 25; i <= 29; i++) {
+        // 25=(LED), 26=/NMI, 27=/RESET, 28=/HALT, 29=/SLENB
+        gpio_init(i);
+        gpio_set_dir(i, GPIO_IN);
+        gpio_set_pulls(i, /*up=*/true, /*down=*/false);
+    }
+    for (uint i = 30; i <= 47; i++) {
+        gpio_init(i);
+        gpio_set_dir(i, GPIO_IN);
+        gpio_set_pulls(i, false, false);
+    }
+
+    // LED off.
+    gpio_init(G_LED);
+    gpio_set_dir(G_LED, GPIO_OUT);
+    SET_LED(0);
+}
+
+void SendRamletFifo(uint addr, byte data) {
+    multicore_fifo_push_blocking((addr << 16)| data);
+}
+
+void core1_main_fifo() {
+    while (true) {
+        putchar('(');
+        uint x = multicore_fifo_pop_blocking();
+        putchar(')');
+        putchar_raw(195);
+        putchar_raw(byte(x >> 16));
+        putchar_raw(byte(x >> 8));
+        putchar_raw(byte(x));
+    }
+}
+
+constexpr uint N = 64 * 1024;
+uint32_t record[N];
+
+int core0_main() {
+  uint i = 0;
+  while (true) {
+    putchar(':');
+    uint pins16 = pio_sm_get_blocking(pio1, 0);
+    // uint addr = (pins16 >> 16);
+    // bool write = (pins16 & (1lu << (G_RW - 16))) == 0;
+    uint pins0 = pio_sm_get_blocking(pio0, 0);
+
+    record[i++] = pins16;
+    record[i++] = pins0;
+    if (i >= N) break;
+  }
+
+  printf("\nHERE\n");
+  for (i = 0; i < N; i+=2) {
+      // putchar_raw(record[i] >> 24);
+      // putchar_raw(record[i] >> 16);
+      // putchar_raw(record[i] >>  8);
+      // putchar_raw(record[i] >>  0);
+      printf("\n%5d: %08x %08x", i, record[i], record[i+1]);
+  }
+  printf("\nDONE\n");
+
+  while (1) {}
+
+#if 0
+  while (true) {
+      printf("\nA");
+    uint pins16 = pio_sm_get_blocking(pio1, 0);
+    // if (pins16 == 0) continue;
+      printf("B %x ", pins16);
+    uint addr = (pins16 >> 16);
+      printf("C %x ", addr);
+    bool write = (pins16 & (1lu << (G_RW - 16))) == 0;
+      printf("D %x ", write);
+    bool send_to_usb = (write && 0x400 <= addr && addr < 0x600);
+      printf("E %x ", send_to_usb);
+
+    uint pins0 = pio_sm_get_blocking(pio0, 0);
+      printf("F %x ", pins0);
+
+    if (send_to_usb) {
+      printf("G");
+          byte data = (byte)pins0;
+      printf("\nH %x %x ", addr, data);
+        putchar('/');
+          SendRamletFifo(addr, data);
+    }
+  }
+#endif
+}
+int main() {
+  InitializePins();
+  pio_set_gpio_base(pio0, 0);  // map to GPIO 0 to 31
+  pio_set_gpio_base(pio1, 16);  // map to GPIO 16 to 47
+
+  // set_sys_clock_khz(250000, true);  // overclock
+  stdio_usb_init();
+  //printf("*** This is Centipede.\n");
+
+  //pio_set_gpio_base(pio0, 0);  // map to GPIO 0 to 31
+  uint offset0 = pio_add_program(pio0, &watch_data_pio_0_program);
+  //pio_set_gpio_base(pio0, 0);  // map to GPIO 0 to 31
+  watch_data_pio_0_program_init(pio0, 0, offset0);
+  //pio_set_gpio_base(pio0, 0);  // map to GPIO 0 to 31
+
+  //pio_set_gpio_base(pio1, 16);  // map to GPIO 16 to 47
+  uint offset1 = pio_add_program(pio1, &watch_addr_pio_1_program);
+  //pio_set_gpio_base(pio1, 16);  // map to GPIO 16 to 47
+  watch_addr_pio_1_program_init(pio1, 0, offset1);
+  //pio_set_gpio_base(pio1, 16);  // map to GPIO 16 to 47
+
+
+#if 1
+  // multicore_launch_core1(core1_main_fifo);
+#endif
+  core0_main();
+}
