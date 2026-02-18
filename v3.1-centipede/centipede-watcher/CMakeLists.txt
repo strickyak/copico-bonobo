@@ -14,7 +14,10 @@ pico_sdk_init()
 
 add_executable(${PROJECT} watcher.cpp)
 pico_generate_pio_header(${PROJECT}  ${CMAKE_CURRENT_LIST_DIR}/watch.pio)
-target_sources(${PROJECT} PRIVATE watcher.cpp )
+target_sources(${PROJECT} PRIVATE
+    watcher.cpp
+    disk11_rom.c
+)
 target_link_libraries(${PROJECT} PRIVATE
     hardware_pio
     pico_stdlib
