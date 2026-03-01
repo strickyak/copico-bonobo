@@ -12,10 +12,10 @@ project(${PROJECT} C CXX ASM)
 pico_sdk_init()
 
 
-add_executable(${PROJECT} watcher.cpp)
+add_executable(${PROJECT} watcher-32d-eq.cpp)
 pico_generate_pio_header(${PROJECT}  ${CMAKE_CURRENT_LIST_DIR}/watch.pio)
 target_sources(${PROJECT} PRIVATE
-    watcher.cpp
+    watcher-32d-eq.cpp
     disk11_rom.c
 )
 target_link_libraries(${PROJECT} PRIVATE
