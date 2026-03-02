@@ -1,3 +1,5 @@
+#error THIS DOES NOT WORK
+
 /* I tried writing this right after I got watcher-march running
  * with double-speed coco3 (250MHz or 270MHz but not 300MHz).
  * However this is not working, just trying to add 
@@ -436,16 +438,11 @@ void background() {
 
 #define SAY(C) PUSH((C)&255)
 
-#if 0
-void foreground() {
-    // Disable interrupts in this "fast" core.
-    save_and_disable_interrupts();
-
-    while (true) {
-        STALL_WHILE(G_E, CENTIPEDE_INVERT_EQ, 'v');
-#else
 void on_rise_of_E() {
-#endif
+
+    // Check which flag fired and clear it
+    if (pio_interrupt_get(pio0, 0)) {
+        pio_interrupt_clear(pio0, 0);
 
         volatile uint signals = volatile_sio_hw->gpio_in;
         uint abus = sio_hw->gpio_hi_in & 0xFFFF;
@@ -565,12 +562,8 @@ void on_rise_of_E() {
               STALL_WHILE(G_E , not CENTIPEDE_INVERT_EQ, 's');
             } // end read or write
         } // end if special
-#if 1
-}
-#else
-    } // end while true
-} // end foreground()
-#endif
+  } // end if
+}  // end on_rise_of_E
 
 int main() {
   InitializePins();
@@ -581,11 +574,59 @@ int main() {
   // foreground must be fast.
   multicore_launch_core1(foreground);
 #else
-  irq_set_exclusive_handler(PIO0_IRQ_0, on_rise_of_E);
   pio_clear_instruction_memory(pio0);
   const uint off = pio_add_program(pio0, &fire_on_rise_of_E_program);
   fire_on_rise_of_E_program_init(pio0, 0, 0);
+
+  irq_set_exclusive_handler(PIO0_IRQ_0, on_rise_of_E);
+  // Enables PIO0's IRQ flags to trigger the system-level IRQ0
+  // 'source' is usually pio_intr_sm0, pio_intr_sm1, etc.
+  pio_set_irq0_source_enabled(pio0, pis_interrupt0, true);
+  // irq_set_enabled(/*num=*/PIO0_IRQ_0, /*enabled=*/true);
+  irq_set_enabled(/*num=*/pis_interrupt0, /*enabled=*/true);
 #endif
 
   background(); // background on core 0 handles interrupts.
 }
+
+#if 0 // ===============================================
+
+GEMINI: Here is how you would route PIO 0, IRQ Flag 0 to a handler on the RP2350:
+
+#include "hardware/pio.h"
+#include "hardware/irq.h"
+
+void my_pio_isr() {
+    // Check which flag fired and clear it
+    if (pio_interrupt_get(pio0, 0)) {
+        pio_interrupt_clear(pio0, 0);
+        // Your logic here
+    }
+}
+
+void setup_pio_interrupt() {
+    // 1. Route PIO IRQ flag 0 to the PIO system IRQ 0
+    pio_set_irq0_source_enabled(pio0, pis_interrupt0, true);
+
+    // 2. Map the system IRQ to our C function
+    irq_set_exclusive_handler(PIO0_IRQ_0, my_pio_isr);
+
+    // 3. Enable the interrupt in the NVIC
+    irq_set_enabled(PIO0_IRQ_0, true);
+}
+
+GEMINI: To trigger an interrupt that the CPU can catch, use the following syntax:
+
+.program my_interrupt_program
+
+; Option 1: Set the flag and continue immediately
+irq 0           ; Sets IRQ flag 0 (routes to system if enabled)
+
+; Option 2: Set the flag and wait for the CPU to clear it
+irq block 0     ; Stalls the state machine until the CPU clears flag 0
+
+; Option 3: Wait for a flag to be set by another source
+wait 1 irq 0    ; Stalls until flag 0 is set, then clears it automatically
+
+
+#endif // ===============================================

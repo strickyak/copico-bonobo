@@ -1,3 +1,9 @@
+/*
+ * watcher-march will work on double-speed coco3 
+ * if we are at 250 or 270 MHz (but not 150 or 300).
+ * But does not use any PIO yet.
+ * */
+#define CENTIPEDE_ADD_16K 1
 #define CENTIPEDE_24D_EQ 1
 #define CENTIPEDE_INVERT_EQ 1
 #define CENTIPEDE_FAST_EQ 1
@@ -32,8 +38,6 @@ extern int stdio_usb_in_chars(char* buf, int length);
 #ifdef __cplusplus
 }
 #endif
-
-#include "watch.pio.h"
 
 #define G_RW 20
 #define G_E  21
@@ -71,7 +75,10 @@ extern int stdio_usb_in_chars(char* buf, int length);
 using byte = unsigned char;
 
 #define INCLUDING
-#include "disk11_rom.c" // byte disk11_rom[8192]
+#include "disk11_rom.c" // byte disk11_rom[8192]...
+// #include "hdbdw3cc3_rom.c"
+// #include "hdbchs_rom.c"
+// #include "hdbsdc_rom.c"
 
 using IOReader = byte(*)(uint addr);
 using IOWriter = void(*)(uint addr, byte d);
@@ -110,6 +117,7 @@ void DefaultWriter(uint addr, byte d) { gpio_set_dir_out_masked(0); }
 #define FIFO_NMI   0x04000000u
 #define FIFO_FLOPPY_COMMAND 0x05000000u
 #define FIFO_W_256   0x06000000u  // finished 256 bytes of written data
+#define FIFO_FLOPPY_LATCH 0x07000000u
 
 byte floppy_latch;
 byte floppy_command;
@@ -137,6 +145,19 @@ FORCE_INLINE bool inline_volatile_gpio_get(uint pin) {
 #endif
 }
 
+FORCE_INLINE void force_inline_multicore_fifo_push_blocking(uint32_t data) {
+    // We wait for the fifo to have some space
+    while (!multicore_fifo_wready())
+        tight_loop_contents();
+
+    sio_hw->fifo_wr = data;
+
+    // Fire off an event to the other core
+    __sev();
+}
+
+
+#if 0
 template <typename T, uint32_t Size>
 class CrossCoreFIFO {
     static_assert((Size & (Size - 1)) == 0, "Size must be a power of 2");
@@ -179,6 +200,7 @@ private:
     std::atomic<uint32_t> head; // Written by Producer
     std::atomic<uint32_t> tail; // Written by Consumer
 };
+#endif
 
 void INPUT(int i) {
         gpio_init(i);
@@ -197,7 +219,6 @@ void InitializePins() {
         gpio_set_dir(i, GPIO_IN);
         gpio_set_pulls(i, false, false);
     }
-#if 1
     OUTPUT( G_LED   , 1 );
 #if G_SND
     INPUT( G_SND   );
@@ -205,28 +226,20 @@ void InitializePins() {
 #if G_CART
     OUTPUT( G_CART  , 1);
 #endif
-    OUTPUT( G_SLENB  , 1);
-    OUTPUT( G_HALT  , 1);
-    OUTPUT( G_NMI   , 1);
+
+    OUTPUT(G_SLENB, 0);
+    gpio_set_dir(G_SLENB, GPIO_IN);
+
+    OUTPUT( G_HALT  , 0);
+    gpio_set_dir(G_HALT, GPIO_IN);
+
+
+    OUTPUT( G_NMI   , 0);
+    gpio_set_dir(G_NMI, GPIO_IN);
+
     INPUT( G_RESET  );
     gpio_set_pulls(G_RESET, /*up=*/true, /*down=*/false);
-#else
-    for (uint i = 25; i <= 29; i++) {
-        gpio_init(i);
-        switch (i) {
-        case G_RESET:
-            gpio_set_dir(i, GPIO_IN);
-            gpio_set_pulls(i, /*up=*/true, /*down=*/false);
-            break;
-        default:
-            gpio_set_dir(i, GPIO_IN);
-            gpio_set_pulls(i, /*up=*/true, /*down=*/false);
-            gpio_set_dir(i, GPIO_OUT);
-            gpio_put(i, 1);
-            break;
-        }
-    }
-#endif
+
     for (uint i = 32; i <= 47; i++) {
         gpio_init(i);
         gpio_set_dir(i, GPIO_IN);
@@ -242,13 +255,13 @@ constexpr uint N = 1000;
 uint32_t Record[N];
 
 void HaltOn() {
-        gpio_set_dir(G_HALT, true);
-        gpio_put(G_HALT, false);
+        gpio_set_dir(G_HALT, GPIO_OUT);
+        // gpio_put(G_HALT, false);
 }
 void HaltOff() {
-        sleep_us(100);
-        gpio_put(G_HALT, true);
-        gpio_set_dir(G_HALT, false);
+        // sleep_us(100);
+        // gpio_put(G_HALT, true);
+        gpio_set_dir(G_HALT, GPIO_IN);
 }
 
 void Fatal(const char* s, int x) {
@@ -339,9 +352,11 @@ void background() {
                     break;
 
                 case FIFO_NMI>>24:
-                    gpio_put(G_NMI, 0);  // Activate NMI
+                    gpio_set_dir(G_NMI, GPIO_OUT);
+                    // gpio_put(G_NMI, 0);  // Activate NMI
                     sleep_us(2);  // for more than a cycle
-                    gpio_put(G_NMI, 1);  // Activate NMI
+                    // gpio_put(G_NMI, 1);  // Release NMI
+                    gpio_set_dir(G_NMI, GPIO_IN);
                                          //
                     // putchar('Q');
 
@@ -352,6 +367,17 @@ void background() {
                     putchar_raw('I');
                     putchar_raw('\n');
                     break;
+
+                case FIFO_FLOPPY_LATCH>>24:
+                    {
+                        static uint last_latch;
+                        if (x != last_latch) {
+                            printf(" _%02x ", (x&0xFF));
+                            last_latch = x;
+                        }
+                    }
+                    break;
+
                 case FIFO_FLOPPY_COMMAND>>24:
                     printf(" f!%02x ", (x&0xFF));
                     switch (x&0xFF) {
@@ -400,7 +426,7 @@ void background() {
                 default:
                     printf("\nWUT? FIFO %x\n", x);
             }
-            sleep_us(5);
+            // sleep_us(5);
             HaltOff();
     }
 }
@@ -411,7 +437,7 @@ void background() {
 }
 
 
-#define SAY(C) multicore_fifo_push_blocking((C)&255)
+#define SAY(C) force_inline_multicore_fifo_push_blocking((C)&255)
 
 void foreground() {
     // Disable interrupts in this "fast" core.
@@ -431,7 +457,7 @@ void foreground() {
         if (LIKELY((signals & NEG_SELECTS) == NEG_SELECTS)) { // Not Special Select
 
             if (LIKELY((signals & (1u << G_RW)) != 0)) {
-              // CPU READING -- we TX
+              // NORMAL CPU READING -- we TX
               if (abus >= 0xFF00) {
                   IOReader r = Readers[abus&0x00FF];
                   if (r) {
@@ -440,29 +466,43 @@ void foreground() {
                     gpio_put_masked(0xFF, dbus);
                   } else {
                   }
+#if CENTIPEDE_ADD_16K
+                } else if (abus < 0x8000) {
+                    byte dbus = ram[abus];
+
+                    gpio_set_dir(G_SLENB, GPIO_OUT);
+                    // gpio_put(G_SLENB, 0);
+
+                    gpio_set_dir_out_masked(0xFF);
+                    gpio_put_masked(0xFF, dbus);
+#endif
                 } else {
+                    ;
                 }
 
                 STALL_WHILE(G_E , not CENTIPEDE_INVERT_EQ, 'r');
                 busy_wait_at_least_cycles(6);
                 gpio_set_dir_in_masked(0xFF);
 
-              // END READING
+                // gpio_put(G_SLENB, 1);
+                gpio_set_dir(G_SLENB, GPIO_IN);
+
+              // END NORMAL READING
             } else {
-              // CPU WRITING -- we RX
+              // NORMAL CPU WRITING -- we RX
                 STALL_WHILE(G_Q , not CENTIPEDE_INVERT_EQ, 'p');
-                byte late = (byte)sio_hw->gpio_in;  // late grab of data
-                ram[abus] = late;
+                byte dbus = (byte)sio_hw->gpio_in;  // late grab of data
+                ram[abus] = dbus;
 
                 IOWriter w = 0;
                 if (abus >= 0xFF00) {
                     w = Writers[abus&0x00FF];
-                    if (w) w(abus, late);
+                    if (w) w(abus, dbus);
                 }
 
                 STALL_WHILE(G_E , not CENTIPEDE_INVERT_EQ, 'q');
 
-              // END WRITING
+              // END NORMAL WRITING
             } // end if (writing) else
 
         } else { // Is Special Select
@@ -485,7 +525,7 @@ void foreground() {
     dbus = *floppy_ptr++;
     if ((floppy_latch&0x80)!=0 && floppy_ptr >= floppy_limit) {
             floppy_ptr = floppy_buf;
-            multicore_fifo_push_blocking(FIFO_NMI);
+            force_inline_multicore_fifo_push_blocking(FIFO_NMI);
     }
                           break;
                       default:
@@ -509,6 +549,7 @@ void foreground() {
                   switch (abus & 15) {
                       case 0x0: // WriteLatch
     floppy_latch = dbus;
+    force_inline_multicore_fifo_push_blocking(FIFO_FLOPPY_LATCH | dbus);
                           break;
                       case 0x8: // WriteCommand
     floppy_status = ((dbus & 0xF0) == 0x80) || ((dbus & 0xF0) == 0xA0) ? 0x02: 0x00; // YAK
@@ -516,7 +557,7 @@ void foreground() {
     floppy_ptr = floppy_buf; // Reset pointer.
     if (dbus == 0x17) floppy_track = floppy_buf[0]; // was losing critical race
 
-    multicore_fifo_push_blocking(FIFO_FLOPPY_COMMAND | dbus);
+    force_inline_multicore_fifo_push_blocking(FIFO_FLOPPY_COMMAND | dbus);
                           break;
                       case 0x9: // WriteTrack
     floppy_track = dbus;
@@ -527,8 +568,8 @@ void foreground() {
                       case 0xB: // WriteData
     *floppy_ptr++ = dbus;
     if ((floppy_latch&0x80)!=0 && floppy_ptr >= floppy_limit) {
-        multicore_fifo_push_blocking(FIFO_W_256);
-        multicore_fifo_push_blocking(FIFO_NMI);
+        force_inline_multicore_fifo_push_blocking(FIFO_W_256);
+        force_inline_multicore_fifo_push_blocking(FIFO_NMI);
     }
                           break;
                       default:
