@@ -1,0 +1,46 @@
+.program fire_on_rise_of_E
+.wrap_target
+    wait 0 gpio 21        ; wait fall of notE
+    irq set 0       [10]
+    wait 1 gpio 21  [10]  ; wait fall of notE
+.wrap
+
+
+.program data_tx
+.wrap_target
+    pull block          ; get data value to tx
+    mov x,osr           ; save it in X
+    mov osr,~null
+    out pindirs, 8      ; outputs
+    mov osr,x
+    out pins, 8         ; output tx value
+    wait 0 gpio 21      ; wait for fall of E (end of machine cycle)
+    mov osr,null
+    out pindirs, 8      ; inputs
+.wrap
+
+% c-sdk {
+
+void fire_on_rise_of_E_program_init(PIO pio, uint sm, uint offset) {
+  pio_sm_config cf = fire_on_rise_of_E_program_get_default_config(offset);
+
+  pio_sm_init(pio, sm, offset, &cf);
+  pio_sm_exec(pio, sm, offset);
+  pio_sm_set_enabled(pio, sm, true);
+}
+
+void data_tx_program_init(PIO pio, uint sm, uint offset) {
+  for(int i = 0; i < 8; i++) {
+        pio_gpio_init(pio, i);
+  }
+  pio_sm_set_consecutive_pindirs(pio, sm, 0, 8, false);
+
+  pio_sm_config cf = data_tx_program_get_default_config(offset);
+  sm_config_set_out_pins(&cf, 0, 8);
+
+  pio_sm_init(pio, sm, offset, &cf);
+  pio_sm_exec(pio, sm, offset);
+  pio_sm_set_enabled(pio, sm, true);
+}
+
+%}
