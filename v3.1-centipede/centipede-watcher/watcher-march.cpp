@@ -227,15 +227,26 @@ void InitializePins() {
     OUTPUT( G_CART  , 1);
 #endif
 
-    OUTPUT(G_SLENB, 0);
+    // OUTPUT(G_SLENB, 0);
+    gpio_init(G_SLENB);
+    gpio_set_dir(G_SLENB, GPIO_OUT);
+    gpio_put(G_SLENB, 0);
     gpio_set_dir(G_SLENB, GPIO_IN);
+    gpio_set_pulls(G_SLENB, false, false);
 
-    OUTPUT( G_HALT  , 0);
+    // OUTPUT( G_HALT  , 0);
+    gpio_init(G_HALT);
+    gpio_set_dir(G_HALT, GPIO_OUT);
+    gpio_put(G_HALT, 0);
     gpio_set_dir(G_HALT, GPIO_IN);
+    gpio_set_pulls(G_HALT, false, false);
 
-
-    OUTPUT( G_NMI   , 0);
+    // OUTPUT( G_NMI   , 0);
+    gpio_init(G_NMI);
+    gpio_set_dir(G_NMI, GPIO_OUT);
+    gpio_put(G_NMI, 0);
     gpio_set_dir(G_NMI, GPIO_IN);
+    gpio_set_pulls(G_NMI, false, false);
 
     INPUT( G_RESET  );
     gpio_set_pulls(G_RESET, /*up=*/true, /*down=*/false);
