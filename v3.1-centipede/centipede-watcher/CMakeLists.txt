@@ -17,6 +17,7 @@ add_executable(${PROJECT} watcher-march.cpp)
 target_sources(${PROJECT} PRIVATE
     watcher-march.cpp
     disk11_rom.c
+    cross-core.h
 )
 target_link_libraries(${PROJECT} PRIVATE
     hardware_pio

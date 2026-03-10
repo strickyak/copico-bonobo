@@ -2,7 +2,31 @@
  * watcher-march will work on double-speed coco3
  * if we are at 250 or 270 MHz (but not 150 or 300).
  * But does not use any PIO yet.
+ *
+ * CHANGE LOG
+ *
+ * experiment: WAIT6=0.  Works without the wait
+ * (including 1.5speed coco3) (but 2speed coco3 is
+ * currently broken by CENTIPEDE_BIG_FIFO)
+ *
+ * experiment: HACK42: Let PEEK(&H6EEE) returns 42.
+ * Does coco3/SLENB read our 42?  Doesn't read 42.
+ * but coco2 does, of course (and only reports 18K ?MEM).
+ *
+ * CENTIPEDE_BIG_FIFO: cross-core fifo
+ * with C++ circular buffer class.
+ * Works except coco3(double).
+ * Does Work coco3(1.5speed,basic).
+ *
+ * Tue Mar 10 14:52:40 PDT 2026
+ * watcher-march.cpp-39-finally-fixed:
+ * does three things (ROM, RAM32, RSDOS/Floppy0)
+ * on coco2/16K and coco3(doublespeed).
+ *
  * */
+#define WAIT6 0  // works without the wait.
+#define HACK42 0
+#define CENTIPEDE_BIG_FIFO 1
 #define CENTIPEDE_STEPPING 0
 // #define CENTIPEDE_FIFO_TRIGGER_R  0xA1CD
 // #define CENTIPEDE_FIFO_TRIGGER2_R  0x2602
@@ -80,11 +104,30 @@ extern int stdio_usb_in_chars(char* buf, int length);
 
 using byte = unsigned char;
 
+#include "cross-core.h"
+
+CrossCoreFIFO<uint, 1024> ccfifo;
+
+FORCE_INLINE uint ccfifo_pop_blocking() {
+    uint z = 0;
+    while (1) {
+        bool ok = ccfifo.pop(z);
+        if (ok) return z;
+    }
+}
+
+// #define PUSH force_inline_multicore_fifo_push_blocking
+// #define POP  multicore_fifo_pop_blocking
+
+#define PUSH ccfifo.push
+#define POP  ccfifo_pop_blocking
+
 #define INCLUDING
 #include "disk11_rom.c"  // byte disk11_rom[8192]...
 // #include "hdbdw3cc3_rom.c"
 // #include "hdbchs_rom.c"
 // #include "hdbsdc_rom.c"
+
 
 using IOReader = std::function<byte(uint addr)>;
 using IOWriter = std::function<void(uint addr, byte data)>;
@@ -222,7 +265,6 @@ FORCE_INLINE bool inline_volatile_gpio_get(uint pin) {
 #endif
 }
 
-#define PUSH_BG force_inline_multicore_fifo_push_blocking
 FORCE_INLINE void force_inline_multicore_fifo_push_blocking(uint32_t data) {
   // We wait for the fifo to have some space
   while (!multicore_fifo_wready()) tight_loop_contents();
@@ -352,24 +394,24 @@ class DoCoco64k {
   static void WriteOtherSamBit(uint a, byte d) {
     bool odd = a & 1;
     uint bitnum = (a - 0xFFC0) >> 1;
-    PUSH_BG((odd ? 'A' : 'a') + bitnum);
+    PUSH((odd ? 'A' : 'a') + bitnum);
   }
 
   static void WriteFFD4_P1Clear(uint a, byte d) {
     SamP1Bit = false;
-    PUSH_BG('w');
+    PUSH('w');
   }
   static void WriteFFD5_P1Set(uint a, byte d) {
     SamP1Bit = true;
-    PUSH_BG('x');
+    PUSH('x');
   }
   static void WriteFFDE_TyClear(uint a, byte d) {
     SamTyBit = false;
-    PUSH_BG('y');
+    PUSH('y');
   }
   static void WriteFFDF_TySet(uint a, byte d) {
     SamTyBit = true;
-    PUSH_BG('z');
+    PUSH('z');
   }
 };
 
@@ -511,7 +553,7 @@ class LegacyEngine {
   static void background() {
     while (1) {
       bg_busy = false;
-      uint x = multicore_fifo_pop_blocking();
+      uint x = POP();
       bg_busy = true;
 #if !CENTIPEDE_STEPPING
       HaltOn();
@@ -686,7 +728,7 @@ class LegacyEngine {
     }                                             \
   }
 
-#define SAY(C) PUSH_BG((C) & 255)
+#define SAY(C) PUSH((C) & 255)
 
   static void foreground() {
     // Disable interrupts in this "fast" core.
@@ -725,6 +767,9 @@ class LegacyEngine {
             gpio_put_masked(0xFF, dbus);
           } else if (T::UseCoco64kRam(abus)) {
             dbus = T::Peek(abus);
+#if HACK42
+            if (abus == 0x6EEE) dbus = 42;
+#endif
 
             gpio_set_dir(G_SLENB, GPIO_OUT);
 
@@ -742,26 +787,28 @@ class LegacyEngine {
 
 #if CENTIPEDE_FIFO_WATCH_R
           if (abus == CENTIPEDE_FIFO_WATCH_R) {
-            PUSH_BG(FIFO_WATCH_R | abus);
+            PUSH(FIFO_WATCH_R | abus);
           }
 #endif
 
           STALL_WHILE(G_E, not CENTIPEDE_INVERT_EQ, 'r');
+#if WAIT6
           busy_wait_at_least_cycles(6);
+#endif
           gpio_set_dir_in_masked(0xFF);
           gpio_set_dir(G_SLENB, GPIO_IN);
 
 #if CENTIPEDE_FIFO_TRIGGER_R
           if (trigger == 0 && abus == CENTIPEDE_FIFO_TRIGGER_R) {
-            PUSH_BG(FIFO_TRIGGER_R | abus);
+            PUSH(FIFO_TRIGGER_R | abus);
             trigger = 1;
           } else if (trigger == 1 && abus == CENTIPEDE_FIFO_TRIGGER2_R) {
-            PUSH_BG(FIFO_TRIGGER_R | abus);
+            PUSH(FIFO_TRIGGER_R | abus);
             trigger = 2;
           }
 
           if (trigger == 2) {
-            PUSH_BG(FIFO_READ | (abus << 8) | dbus);
+            PUSH(FIFO_READ | (abus << 8) | dbus);
           }
 #endif
 
@@ -788,7 +835,7 @@ class LegacyEngine {
 
 #if CENTIPEDE_FIFO_TRIGGER_R
           if (trigger == 2) {
-            PUSH_BG(FIFO_WRITE | (abus << 8) | dbus);
+            PUSH(FIFO_WRITE | (abus << 8) | dbus);
           }
 #endif
 
@@ -815,7 +862,7 @@ class LegacyEngine {
                 dbus = *floppy_ptr++;
                 if ((floppy_latch & 0x80) != 0 && floppy_ptr >= floppy_limit) {
                   floppy_ptr = floppy_buf;
-                  PUSH_BG(FIFO_NMI);
+                  PUSH(FIFO_NMI);
                 }
                 break;
               default:
@@ -826,7 +873,9 @@ class LegacyEngine {
           gpio_set_dir_out_masked(0xFF);
           gpio_put_masked(0xFF, dbus);
           STALL_WHILE(G_E, not CENTIPEDE_INVERT_EQ, 's');
+#if WAIT6
           busy_wait_at_least_cycles(6);
+#endif
           gpio_set_dir_in_masked(0xFF);
         } else {  // Special CPU WRITING -- we RX
           // SAY('W');
@@ -839,7 +888,7 @@ class LegacyEngine {
             switch (abus & 15) {
               case 0x0:  // WriteLatch
                 floppy_latch = dbus;
-                PUSH_BG(FIFO_FLOPPY_LATCH | dbus);
+                PUSH(FIFO_FLOPPY_LATCH | dbus);
                 break;
               case 0x8:  // WriteCommand
                 floppy_status =
@@ -851,7 +900,7 @@ class LegacyEngine {
                 if (dbus == 0x17)
                   floppy_track = floppy_buf[0];  // was losing critical race
 
-                PUSH_BG(FIFO_FLOPPY_COMMAND | dbus);
+                PUSH(FIFO_FLOPPY_COMMAND | dbus);
                 break;
               case 0x9:  // WriteTrack
                 floppy_track = dbus;
@@ -862,8 +911,8 @@ class LegacyEngine {
               case 0xB:  // WriteData
                 *floppy_ptr++ = dbus;
                 if ((floppy_latch & 0x80) != 0 && floppy_ptr >= floppy_limit) {
-                  PUSH_BG(FIFO_W_256);
-                  PUSH_BG(FIFO_NMI);
+                  PUSH(FIFO_W_256);
+                  PUSH(FIFO_NMI);
                 }
                 break;
               default:
@@ -884,7 +933,7 @@ class LegacyEngine {
       if (reading && abus == 0xFFFF) {
         ++idling;
         if (idling == 3) {
-          PUSH_BG(FIFO_IDLING | history_i);
+          PUSH(FIFO_IDLING | history_i);
           history_i = 0;
         }
       } else {
