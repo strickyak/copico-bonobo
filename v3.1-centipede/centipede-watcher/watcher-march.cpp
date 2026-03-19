@@ -23,10 +23,19 @@
  * does three things (ROM, RAM32, RSDOS/Floppy0)
  * on coco2/16K and coco3(doublespeed).
  *
- * */
+ */
+
+#define MHz 130 // 180 // 150
+
+//#define CENTIPEDE_REV 3204 // 32d
+#define CENTIPEDE_REV 3205 // 32e
+                           //
+//#define CENTIPEDE_GRAB_ADDR  0xA342
+//#define CENTIPEDE_GRAB_BYTES 100
+
 #define WAIT6 0  // works without the wait.
 #define HACK42 0
-#define CENTIPEDE_BIG_FIFO 1
+#define CENTIPEDE_BIG_FIFO 0
 #define CENTIPEDE_STEPPING 0
 // #define CENTIPEDE_FIFO_TRIGGER_R  0xA1CD
 // #define CENTIPEDE_FIFO_TRIGGER2_R  0x2602
@@ -34,8 +43,6 @@
 #define CENTIPEDE_24D_EQ 1
 #define CENTIPEDE_INVERT_EQ 1
 #define CENTIPEDE_FAST_EQ 1
-#define CENTIPEDE_CTS 18
-#define CENTIPEDE_SCS 19
 
 #define LIKELY(x) __builtin_expect(!!(x), 1)
 #define UNLIKELY(x) __builtin_expect(!!(x), 0)
@@ -73,7 +80,20 @@ extern int stdio_usb_in_chars(char* buf, int length);
 #define G_E 21
 #define G_Q 22
 
-#if CENTIPEDE_24D_EQ  // J6: 1-2 5-6 (Direct E and Q)
+#if CENTIPEDE_REV == 3205 // 32e
+
+#define G_LED 25
+#define G_SCS 26
+#define G_CART 27
+#define G_SLENB 28
+#define G_HALT 29
+#define G_NMI 30
+#define G_CTS 31
+
+#elif CENTIPEDE_REV == 3204 // 32d
+
+#define G_CTS 18   // bodged
+#define G_SCS 19   // bodged
 
 #define G_LED 25
 #define G_SND 26
@@ -172,7 +192,9 @@ PositiveControl<G_LED> Led;
 NegativeOpenCollectorControl<G_HALT> Halt;
 NegativeOpenCollectorControl<G_NMI> Nmi;
 NegativeOpenCollectorControl<G_CART> Cart;
+#if G_RESET
 NegativeOpenCollectorControl<G_RESET> Reset;
+#endif
 
 template <uint GPIN>
 class NegativeSignal {
@@ -187,7 +209,9 @@ class NegativeSignal {
 NegativeSignal<G_RW> Write;
 NegativeSignal<G_E> E;
 NegativeSignal<G_Q> Q;
+#if G_SND
 NegativeSignal<G_SND> Snd;
+#endif
 
 ////////////////////////////////////////////////////////
 
@@ -236,6 +260,7 @@ class DoCoverRam32K {
 #define FIFO_WATCH_R (0x08u << 24)
 #define FIFO_TRIGGER_R (0x09u << 24)
 #define FIFO_IDLING (0x0Au << 24)
+#define FIFO_GRABBED (0x0Bu << 24)
 
 uint trigger;
 volatile uint idling;
@@ -493,9 +518,102 @@ class BigRam {
   }
 };
 
+////////////////////////////////////////////////////////
+
+#define AUTO_TYPE "~~~PRINT MEM\n~~~"
+
+#ifdef AUTO_TYPE
+const char auto_type[] = AUTO_TYPE;
+uint auto_i;
+uint auto_skip = 100;
+uint auto_hold;
+byte auto_value;
+
+const char normal_keyboard[] = "@ABCDEFGHIJKLMNOPQRSTUVWXYZ~~~~ 0123456789:;,-./\n";
+const char shift_keyboard[] = "@abcdefghijklmnopqrstuvwxyz~~~~ ~!\"#$%'()*+<=>?\n";
+
+constexpr int SHIFTED = 0x100;
+
+int find_keycode(char c) {
+    for (uint i = 0; normal_keyboard[i]; i++) {
+        if (normal_keyboard[i]==c) {
+            return i;
+        }
+    }
+    for (uint i = 0; shift_keyboard[i]; i++) {
+        if (shift_keyboard[i]==c) {
+            return i + SHIFTED;
+        }
+    }
+    return -1;
+}
+
+byte keyboard_response(char c) {
+    int code = find_keycode(c);
+    if (code < 0) return 0xFF;
+
+    byte col = code & 7;
+    byte row = (code>>3) & 7;
+
+    byte probe = ram[0xFF02];
+    byte z = 0xff;
+    if ((probe & (1u<<col)) == 0) {
+        z &= 0xFF ^ (1u << row);
+    }
+    if (code & SHIFTED) {
+        if ((probe & 0x80) == 0) {
+            z &= 0xFF ^ (1u << 6);
+        }
+    }
+    PUSH('0' + (15 & (z>>4)));
+    PUSH('0' + (15 & (z>>0)));
+    return z;
+}
+
+
+#endif
+
+void InitAutoType() {
+#ifdef AUTO_TYPE
+    Readers[0x00] = [&](uint a) {
+        if (auto_skip) {
+            --auto_skip;
+            PUSH('~');
+            return (byte)0xFF;
+        }
+        if (auto_hold) {
+            --auto_hold;
+            if (!auto_hold) auto_skip = 100;
+            PUSH(':');
+            return keyboard_response(auto_value);
+        }
+        char c = auto_type[auto_i++];
+        if (!c) {
+            PUSH('0');
+            // EOS
+            Readers[0xFF & 0xFF00] = nullptr;
+            return (byte)0xFF;
+        }
+        PUSH(c);
+        auto_value = c;
+        auto_hold = 100;
+        return (byte)0xFF;
+    };
+#endif
+}
+
+////////////////////////////////////////////////////////
+
 #if CENTIPEDE_STEPPING
 uint history[300];
 uint history_i;
+#endif
+
+#if CENTIPEDE_GRAB_ADDR
+     // grab[0] is unused (to speed things up, by combining
+     // the counter grab_i with the grabbing state variable).
+uint grab[CENTIPEDE_GRAB_BYTES];
+uint grab_i;
 #endif
 
 template <class T>
@@ -514,6 +632,15 @@ class LegacyEngine {
 #if G_CART
     OUTPUT(G_CART, 1);
 #endif
+
+#if G_CTS
+    INPUT(G_CTS);
+#endif
+
+#if G_SCS
+    INPUT(G_SCS);
+#endif
+
 
     // OUTPUT(G_SLENB, 0);
     gpio_init(G_SLENB);
@@ -536,8 +663,10 @@ class LegacyEngine {
     gpio_set_dir(G_NMI, GPIO_IN);
     gpio_set_pulls(G_NMI, false, false);
 
+#if G_RESET
     INPUT(G_RESET);
     gpio_set_pulls(G_RESET, /*up=*/true, /*down=*/false);
+#endif
 
     for (uint i = 32; i <= 47; i++) {
       gpio_init(i);
@@ -563,6 +692,44 @@ class LegacyEngine {
         case 0:
           putchar_raw(255 & x);
           break;
+
+#if CENTIPEDE_GRAB_ADDR
+        case FIFO_GRABBED >> 24:
+          {
+            putchar_raw(C_LOGGING);
+            putchar_raw(5 + 128);
+            putchar_raw('G');
+            putchar_raw('R');
+            putchar_raw('A');
+            putchar_raw('B');
+            putchar_raw('\n');
+
+
+            //printf("\ngrabbed %x [[[[[\n", CENTIPEDE_GRAB_ADDR);
+            // grab[0] is unused (to speed things up).
+            for (uint i = 1; i < CENTIPEDE_GRAB_BYTES; i++) {
+                uint h = grab[i];
+                if (h & (1u<<24)) {
+                    // reading
+                    putchar_raw(C_CYCLE_RD3);
+                    putchar_raw(h >> 16);
+                    putchar_raw(h >> 8);
+                    putchar_raw(h);
+                    //printf("r %04x   -> %02x\n", (h>>8)&0xFFFF, h&0xFF);
+                } else {
+                    // writing
+                  putchar_raw(C_RAM2_WRITE);
+                  putchar_raw(h >> 16);
+                  putchar_raw(h >> 8);
+                  putchar_raw(h);
+                  //printf("w %04x <-   %02x\n", (h>>8)&0xFFFF, h&0xFF);
+                }
+            }
+            //printf("\ngrabbed ]]]]]\n");
+          }
+        break;
+
+#endif
 
 #if CENTIPEDE_STEPPING
         case FIFO_IDLING >> 24:  // watchpoint read
@@ -742,8 +909,8 @@ class LegacyEngine {
       const uint abus = sio_hw->gpio_hi_in & 0xFFFF;
       byte dbus = 0x00;
 
-      constexpr uint NEG_CTS = (1 << CENTIPEDE_CTS);
-      constexpr uint NEG_SCS = (1 << CENTIPEDE_SCS);
+      constexpr uint NEG_CTS = (1 << G_CTS);
+      constexpr uint NEG_SCS = (1 << G_SCS);
       constexpr uint NEG_SELECTS = NEG_CTS | NEG_SCS;
 
       if (LIKELY((signals & NEG_SELECTS) ==
@@ -778,7 +945,7 @@ class LegacyEngine {
 
           } else {
             // don't get involved.  don't gpio_set_dir(G_SLENB, GPIO_OUT).
-#if 0
+#if 1
                         // But read the data bus, in case it is useful.
                         STALL_WHILE(G_Q , not CENTIPEDE_INVERT_EQ, 'k');
                         dbus = (byte)sio_hw->gpio_in;  // late grab of data
@@ -925,6 +1092,21 @@ class LegacyEngine {
         }  // end read or write
       }  // end if special
 
+#if CENTIPEDE_GRAB_ADDR
+     // grab[0] is unused (to speed things up, by combining
+     // the counter grab_i with the grabbing state variable).
+    if (abus == CENTIPEDE_GRAB_ADDR) {
+        grab_i = 1;
+    }
+    if (grab_i) {
+        grab[grab_i++] = (reading ? (1u<<24) : 0) | (abus << 8) | dbus;
+        if (grab_i >= CENTIPEDE_GRAB_BYTES) {
+            grab_i = 0;
+            PUSH(FIFO_GRABBED);
+        }
+    }
+#endif
+
 #if CENTIPEDE_STEPPING
       if (history_i < sizeof history) {
         history[history_i++] = (uint(reading) << 24) | (abus << 8) | dbus;
@@ -974,7 +1156,21 @@ class Engine0 :
 
 int main() {
   Engine0::InitializePins();
-  set_sys_clock_khz(250000, true);  // overclock 250 MHz (normal is 150 MHz)
+#if MHz != 150
+  set_sys_clock_khz(MHz * 1000, true);
+#endif
   stdio_usb_init();
+
+  for (uint i = 0; i < 5; i++) {
+    SET_LED(1);
+    sleep_ms(500);
+    Engine0::InitializePins();
+
+    SET_LED(0);
+    sleep_ms(500);
+    Engine0::InitializePins();
+  }
+
+  InitAutoType();
   Engine0::Run();
 }
