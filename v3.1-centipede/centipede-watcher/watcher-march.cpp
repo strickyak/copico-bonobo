@@ -9,7 +9,6 @@
 // #define CENTIPEDE_FIFO_WATCH_R 0xA1CB
 #define CENTIPEDE_24D_EQ 1
 #define CENTIPEDE_INVERT_EQ 1
-#define CENTIPEDE_FAST_EQ 1
 #define CENTIPEDE_CTS 18
 #define CENTIPEDE_SCS 19
 
@@ -150,6 +149,7 @@ NegativeSignal<G_SND> Snd;
 
 byte ram[128 * 1024];
 
+#if 0
 template <class T>
 class DoCoverRam32K {
   FORCE_INLINE static bool Predicate(uint a) { return a < 0x8000; }
@@ -158,6 +158,7 @@ class DoCoverRam32K {
   }
   FORCE_INLINE static byte Read(uint a) { return ram[a]; }
 };
+#endif
 
 ////////////////////////////////////////////////////////
 
@@ -328,7 +329,7 @@ class DoCoco64k {
  public:
   static constexpr bool HasCoco64k() { return true; }
   FORCE_INLINE static bool UseCoco64kRam(uint a) {
-    return (a < (SamTyBit ? 0xFF00 : 0x8000));
+    return (a < ((SamTyBit || MmuEnabled) ? 0xFF00 : 0x8000));
   }
   FORCE_INLINE static uint TranslateCoco64kRamAddress(uint a) {
     return SamP1Bit ? (0x8000 ^ a) : a;
@@ -374,35 +375,6 @@ class DoCoco64k {
 };
 
 template <class T>
-class DoCoco3Mmu {
- public:
-  static void InitCoco3Mmu() {
-    for (uint t = 0; t < 2; t++) {
-      for (uint i = 0; i < 8; i++) {
-        MmuMap[t][i] = 0x38 + i;
-      }
-    }
-
-    Writers[0x90] = T::WriteFF90;
-    Writers[0x91] = T::WriteFF91;
-
-    for (uint t = 0; t < 2; t++) {
-      for (uint i = 0; i < 8; i++) {
-        Writers[8 * t + i + 0xA0] = [=](uint a, byte d) { MmuMap[t][i] = d; };
-        Readers[8 * t + i + 0xA0] = [=](uint a) { return MmuMap[t][i]; };
-      }
-    }
-  }
-
- private:
-  static void WriteFF90(uint a, byte d) {
-    MmuEnabled = (1u << 6) & d;
-    StickyRamFFEx = (1u << 3) & d;
-  }
-  static void WriteFF91(uint a, byte d) { MmuTask = 1u & d; }
-};
-
-template <class T>
 class SmallRam {
   FORCE_INLINE static uint Phys(uint a) {
     a &= 0xFFFF;
@@ -415,6 +387,7 @@ class SmallRam {
 
  public:
   static constexpr bool HasBigRam() { return false; }
+  static void RamInit() {}
 
   FORCE_INLINE static byte Peek(uint a) {
     uint p = Phys(a);
@@ -429,17 +402,43 @@ class SmallRam {
 template <class T>
 class BigRam {
   FORCE_INLINE static uint Phys(uint a) {
-    if (!MmuEnabled) return a;
-    if (a >= 0xFE00) return a;
+    if (!MmuEnabled) return a | (sizeof ram - 64*1024);
+    if (a >= 0xFE00) return a | (sizeof ram - 64*1024);
 
     uint slot = 7 & (a >> 13);
     uint offset = (a & 0x1FFF);
-    uint block = 15 & MmuMap[MmuTask][slot];
-    return (block << 13) + offset;
+    uint block = MmuMap[MmuTask][slot];
+    return T::TranslateCoco64kRamAddress(((block << 13) + offset) & (sizeof ram - 1));
   }
+
+  static void WriteFF90(uint a, byte d) {
+    MmuEnabled = (1u << 6) & d;
+    StickyRamFFEx = (1u << 3) & d;
+  }
+  static void WriteFF91(uint a, byte d) { MmuTask = 1u & d; }
 
  public:
   static constexpr bool HasBigRam() { return true; }
+
+  static void RamInit() {
+    for (uint t = 0; t < 2; t++) {
+        for (uint i = 0; i < 8; i++) {
+          MmuMap[t][i] = (i ? 0x38+i : 0);
+        }
+    }
+    MmuEnabled = 0;
+    MmuTask = 0;
+
+    Writers[0x90] = T::WriteFF90;
+    Writers[0x91] = T::WriteFF91;
+
+    for (uint t = 0; t < 2; t++) {
+      for (uint i = 0; i < 8; i++) {
+        Writers[8 * t + i + 0xA0] = [=](uint a, byte d) { MmuMap[t][i] = d; };
+        Readers[8 * t + i + 0xA0] = [=](uint a) { return MmuMap[t][i]; };
+      }
+    }
+  }
 
   FORCE_INLINE static byte Peek(uint a) {
     uint p = Phys(a);
@@ -747,7 +746,7 @@ class LegacyEngine {
 #endif
 
           STALL_WHILE(G_E, not CENTIPEDE_INVERT_EQ, 'r');
-          busy_wait_at_least_cycles(6);
+          // busy_wait_at_least_cycles(6);
           gpio_set_dir_in_masked(0xFF);
           gpio_set_dir(G_SLENB, GPIO_IN);
 
@@ -826,7 +825,7 @@ class LegacyEngine {
           gpio_set_dir_out_masked(0xFF);
           gpio_put_masked(0xFF, dbus);
           STALL_WHILE(G_E, not CENTIPEDE_INVERT_EQ, 's');
-          busy_wait_at_least_cycles(6);
+          // busy_wait_at_least_cycles(6);
           gpio_set_dir_in_masked(0xFF);
         } else {  // Special CPU WRITING -- we RX
           // SAY('W');
@@ -911,8 +910,7 @@ class LegacyEngine {
 };  // end LegacyEngine
 
 class Engine0 :
-    // public DoCoco3Mmu<Engine0>,
-    public SmallRam<Engine0>,
+    public BigRam<Engine0>,
     public DoCoco64k<Engine0>,
     public LegacyEngine<Engine0> {
  public:
