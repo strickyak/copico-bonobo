@@ -2,15 +2,19 @@
  * watcher-march will work on double-speed coco3
  * if we are at 250 or 270 MHz (but not 150 or 300).
  * But does not use any PIO yet.
- * */
+ */
+
+#define CENTIPEDE_GRAB_ADDR  0xA342
+#define CENTIPEDE_GRAB_BYTES 100
+
 #define CENTIPEDE_STEPPING 0
 // #define CENTIPEDE_FIFO_TRIGGER_R  0xA1CD
 // #define CENTIPEDE_FIFO_TRIGGER2_R  0x2602
 // #define CENTIPEDE_FIFO_WATCH_R 0xA1CB
 #define CENTIPEDE_24D_EQ 1
 #define CENTIPEDE_INVERT_EQ 1
-#define CENTIPEDE_CTS 18
-#define CENTIPEDE_SCS 19
+#define G_CTS 18
+#define G_SCS 19
 
 #define LIKELY(x) __builtin_expect(!!(x), 1)
 #define UNLIKELY(x) __builtin_expect(!!(x), 0)
@@ -194,6 +198,7 @@ class DoCoverRam32K {
 #define FIFO_WATCH_R (0x08u << 24)
 #define FIFO_TRIGGER_R (0x09u << 24)
 #define FIFO_IDLING (0x0Au << 24)
+#define FIFO_GRABBED (0x0Bu << 24)
 
 uint trigger;
 volatile uint idling;
@@ -223,7 +228,7 @@ FORCE_INLINE bool inline_volatile_gpio_get(uint pin) {
 #endif
 }
 
-#define PUSH_BG force_inline_multicore_fifo_push_blocking
+#define PUSH force_inline_multicore_fifo_push_blocking
 FORCE_INLINE void force_inline_multicore_fifo_push_blocking(uint32_t data) {
   // We wait for the fifo to have some space
   while (!multicore_fifo_wready()) tight_loop_contents();
@@ -353,24 +358,24 @@ class DoCoco64k {
   static void WriteOtherSamBit(uint a, byte d) {
     bool odd = a & 1;
     uint bitnum = (a - 0xFFC0) >> 1;
-    PUSH_BG((odd ? 'A' : 'a') + bitnum);
+    PUSH((odd ? 'A' : 'a') + bitnum);
   }
 
   static void WriteFFD4_P1Clear(uint a, byte d) {
     SamP1Bit = false;
-    PUSH_BG('w');
+    PUSH('w');
   }
   static void WriteFFD5_P1Set(uint a, byte d) {
     SamP1Bit = true;
-    PUSH_BG('x');
+    PUSH('x');
   }
   static void WriteFFDE_TyClear(uint a, byte d) {
     SamTyBit = false;
-    PUSH_BG('y');
+    PUSH('y');
   }
   static void WriteFFDF_TySet(uint a, byte d) {
     SamTyBit = true;
-    PUSH_BG('z');
+    PUSH('z');
   }
 };
 
@@ -386,7 +391,6 @@ class SmallRam {
   }
 
  public:
-  static constexpr bool HasBigRam() { return false; }
   static void RamInit() {}
 
   FORCE_INLINE static byte Peek(uint a) {
@@ -402,6 +406,18 @@ class SmallRam {
 template <class T>
 class BigRam {
   FORCE_INLINE static uint Phys(uint a) {
+    a &= 0xFFFF;
+    if (T::UseCoco64kRam(a)) {
+      return T::TranslateCoco64kRamAddress(a);
+    } else {
+      return a;
+    }
+
+
+#if 0
+    return a & 0xFFFF;
+    return a | (sizeof ram - 64*1024);
+
     if (!MmuEnabled) return a | (sizeof ram - 64*1024);
     if (a >= 0xFE00) return a | (sizeof ram - 64*1024);
 
@@ -409,6 +425,7 @@ class BigRam {
     uint offset = (a & 0x1FFF);
     uint block = MmuMap[MmuTask][slot];
     return T::TranslateCoco64kRamAddress(((block << 13) + offset) & (sizeof ram - 1));
+#endif
   }
 
   static void WriteFF90(uint a, byte d) {
@@ -418,8 +435,6 @@ class BigRam {
   static void WriteFF91(uint a, byte d) { MmuTask = 1u & d; }
 
  public:
-  static constexpr bool HasBigRam() { return true; }
-
   static void RamInit() {
     for (uint t = 0; t < 2; t++) {
         for (uint i = 0; i < 8; i++) {
@@ -441,18 +456,25 @@ class BigRam {
   }
 
   FORCE_INLINE static byte Peek(uint a) {
-    uint p = Phys(a);
-    return ram[p];
+    uint ph = Phys(a);
+    return ram[ph];
   }
   FORCE_INLINE static void Poke(uint a, byte d) {
-    uint p = Phys(a);
-    ram[p] = d;
+    uint ph = Phys(a);
+    ram[ph] = d;
   }
 };
 
 #if CENTIPEDE_STEPPING
 uint history[300];
 uint history_i;
+#endif
+
+#if CENTIPEDE_GRAB_ADDR
+     // grab[0] is unused (to speed things up, by combining
+     // the counter grab_i with the grabbing state variable).
+uint grab[CENTIPEDE_GRAB_BYTES];
+uint grab_i;
 #endif
 
 template <class T>
@@ -520,6 +542,44 @@ class LegacyEngine {
         case 0:
           putchar_raw(255 & x);
           break;
+
+#if CENTIPEDE_GRAB_ADDR
+        case FIFO_GRABBED >> 24:
+          {
+            putchar_raw(C_LOGGING);
+            putchar_raw(5 + 128);
+            putchar_raw('G');
+            putchar_raw('R');
+            putchar_raw('A');
+            putchar_raw('B');
+            putchar_raw('\n');
+
+
+            //printf("\ngrabbed %x [[[[[\n", CENTIPEDE_GRAB_ADDR);
+            // grab[0] is unused (to speed things up).
+            for (uint i = 1; i < CENTIPEDE_GRAB_BYTES; i++) {
+                uint h = grab[i];
+                if (h & (1u<<24)) {
+                    // reading
+                    putchar_raw(C_CYCLE_RD3);
+                    putchar_raw(h >> 16);
+                    putchar_raw(h >> 8);
+                    putchar_raw(h);
+                    //printf("r %04x   -> %02x\n", (h>>8)&0xFFFF, h&0xFF);
+                } else {
+                    // writing
+                  putchar_raw(C_RAM2_WRITE);
+                  putchar_raw(h >> 16);
+                  putchar_raw(h >> 8);
+                  putchar_raw(h);
+                  //printf("w %04x <-   %02x\n", (h>>8)&0xFFFF, h&0xFF);
+                }
+            }
+            //printf("\ngrabbed ]]]]]\n");
+          }
+        break;
+
+#endif
 
 #if CENTIPEDE_STEPPING
         case FIFO_IDLING >> 24:  // watchpoint read
@@ -685,7 +745,7 @@ class LegacyEngine {
     }                                             \
   }
 
-#define SAY(C) PUSH_BG((C) & 255)
+#define SAY(C) PUSH((C) & 255)
 
   static void foreground() {
     // Disable interrupts in this "fast" core.
@@ -699,8 +759,8 @@ class LegacyEngine {
       const uint abus = sio_hw->gpio_hi_in & 0xFFFF;
       byte dbus = 0x00;
 
-      constexpr uint NEG_CTS = (1 << CENTIPEDE_CTS);
-      constexpr uint NEG_SCS = (1 << CENTIPEDE_SCS);
+      constexpr uint NEG_CTS = (1 << G_CTS);
+      constexpr uint NEG_SCS = (1 << G_SCS);
       constexpr uint NEG_SELECTS = NEG_CTS | NEG_SCS;
 
       if (LIKELY((signals & NEG_SELECTS) ==
@@ -715,13 +775,6 @@ class LegacyEngine {
               gpio_put_masked(0xFF, dbus);
             } else {
             }
-          } else if (T::HasBigRam()) {
-            dbus = T::Peek(abus);
-
-            gpio_set_dir(G_SLENB, GPIO_OUT);
-
-            gpio_set_dir_out_masked(0xFF);
-            gpio_put_masked(0xFF, dbus);
           } else if (T::UseCoco64kRam(abus)) {
             dbus = T::Peek(abus);
 
@@ -732,35 +785,33 @@ class LegacyEngine {
 
           } else {
             // don't get involved.  don't gpio_set_dir(G_SLENB, GPIO_OUT).
-#if 0
-                        // But read the data bus, in case it is useful.
-                        STALL_WHILE(G_Q , not CENTIPEDE_INVERT_EQ, 'k');
-                        dbus = (byte)sio_hw->gpio_in;  // late grab of data
-#endif
+
+            // But read the data bus, in case it is useful.
+            STALL_WHILE(G_Q , not CENTIPEDE_INVERT_EQ, 'k');
+            dbus = (byte)sio_hw->gpio_in;  // late grab of data
           }
 
 #if CENTIPEDE_FIFO_WATCH_R
           if (abus == CENTIPEDE_FIFO_WATCH_R) {
-            PUSH_BG(FIFO_WATCH_R | abus);
+            PUSH(FIFO_WATCH_R | abus);
           }
 #endif
 
           STALL_WHILE(G_E, not CENTIPEDE_INVERT_EQ, 'r');
-          // busy_wait_at_least_cycles(6);
           gpio_set_dir_in_masked(0xFF);
           gpio_set_dir(G_SLENB, GPIO_IN);
 
 #if CENTIPEDE_FIFO_TRIGGER_R
           if (trigger == 0 && abus == CENTIPEDE_FIFO_TRIGGER_R) {
-            PUSH_BG(FIFO_TRIGGER_R | abus);
+            PUSH(FIFO_TRIGGER_R | abus);
             trigger = 1;
           } else if (trigger == 1 && abus == CENTIPEDE_FIFO_TRIGGER2_R) {
-            PUSH_BG(FIFO_TRIGGER_R | abus);
+            PUSH(FIFO_TRIGGER_R | abus);
             trigger = 2;
           }
 
           if (trigger == 2) {
-            PUSH_BG(FIFO_READ | (abus << 8) | dbus);
+            PUSH(FIFO_READ | (abus << 8) | dbus);
           }
 #endif
 
@@ -769,16 +820,22 @@ class LegacyEngine {
           // NORMAL CPU WRITING -- we RX
           STALL_WHILE(G_Q, not CENTIPEDE_INVERT_EQ, 'p');
           dbus = (byte)sio_hw->gpio_in;  // late grab of data
+#if 0
           if (T::HasBigRam()) {
             T::Poke(abus, dbus);
           } else if (T::UseCoco64kRam(abus)) {
             T::Poke(abus, dbus);
           } else {
-            ram[abus] = dbus;
+            // ram[abus] = dbus;
+            T::Poke(abus, dbus);
           }
+#else
+          T::Poke(abus, dbus);
+#endif
 
           IOWriter w = 0;
           if (abus >= 0xFF00) {
+            PUSH(FIFO_WRITE | (abus << 8) | dbus);
             w = Writers[abus & 0x00FF];
             if (w) w(abus, dbus);
           }
@@ -787,7 +844,7 @@ class LegacyEngine {
 
 #if CENTIPEDE_FIFO_TRIGGER_R
           if (trigger == 2) {
-            PUSH_BG(FIFO_WRITE | (abus << 8) | dbus);
+            PUSH(FIFO_WRITE | (abus << 8) | dbus);
           }
 #endif
 
@@ -804,7 +861,7 @@ class LegacyEngine {
 
           } else {  // READ SCS
                     // SAY('R');
-            dbus = ram[abus];
+
             switch (abus & 15) {
               case 0x8:  // ReadStatus
                 dbus = floppy_status;
@@ -814,10 +871,12 @@ class LegacyEngine {
                 dbus = *floppy_ptr++;
                 if ((floppy_latch & 0x80) != 0 && floppy_ptr >= floppy_limit) {
                   floppy_ptr = floppy_buf;
-                  PUSH_BG(FIFO_NMI);
+                  PUSH(FIFO_NMI);
                 }
                 break;
               default:
+                // dbus = ram[abus];
+                dbus = T::Peek(abus);
                 break;
             }
           }
@@ -825,20 +884,20 @@ class LegacyEngine {
           gpio_set_dir_out_masked(0xFF);
           gpio_put_masked(0xFF, dbus);
           STALL_WHILE(G_E, not CENTIPEDE_INVERT_EQ, 's');
-          // busy_wait_at_least_cycles(6);
           gpio_set_dir_in_masked(0xFF);
         } else {  // Special CPU WRITING -- we RX
           // SAY('W');
           STALL_WHILE(G_Q, not CENTIPEDE_INVERT_EQ, 'p');
           dbus = (byte)sio_hw->gpio_in;  // grab dbus after q drops
-          ram[abus] = dbus;
+          // ram[abus] = dbus;
+          T::Poke(abus, dbus);
 
           if (LIKELY((signals & NEG_SCS) == 0)) {
             // WRITE SCS
             switch (abus & 15) {
               case 0x0:  // WriteLatch
                 floppy_latch = dbus;
-                PUSH_BG(FIFO_FLOPPY_LATCH | dbus);
+                PUSH(FIFO_FLOPPY_LATCH | dbus);
                 break;
               case 0x8:  // WriteCommand
                 floppy_status =
@@ -850,7 +909,7 @@ class LegacyEngine {
                 if (dbus == 0x17)
                   floppy_track = floppy_buf[0];  // was losing critical race
 
-                PUSH_BG(FIFO_FLOPPY_COMMAND | dbus);
+                PUSH(FIFO_FLOPPY_COMMAND | dbus);
                 break;
               case 0x9:  // WriteTrack
                 floppy_track = dbus;
@@ -861,8 +920,8 @@ class LegacyEngine {
               case 0xB:  // WriteData
                 *floppy_ptr++ = dbus;
                 if ((floppy_latch & 0x80) != 0 && floppy_ptr >= floppy_limit) {
-                  PUSH_BG(FIFO_W_256);
-                  PUSH_BG(FIFO_NMI);
+                  PUSH(FIFO_W_256);
+                  PUSH(FIFO_NMI);
                 }
                 break;
               default:
@@ -875,6 +934,21 @@ class LegacyEngine {
         }  // end read or write
       }  // end if special
 
+#if CENTIPEDE_GRAB_ADDR
+     // grab[0] is unused (to speed things up, by combining
+     // the counter grab_i with the grabbing state variable).
+    if (abus == CENTIPEDE_GRAB_ADDR) {
+        grab_i = 1;
+    }
+    if (grab_i) {
+        grab[grab_i++] = (reading ? (1u<<24) : 0) | (abus << 8) | dbus;
+        if (grab_i >= CENTIPEDE_GRAB_BYTES) {
+            grab_i = 0;
+            PUSH(FIFO_GRABBED);
+        }
+    }
+#endif
+
 #if CENTIPEDE_STEPPING
       if (history_i < sizeof history) {
         history[history_i++] = (uint(reading) << 24) | (abus << 8) | dbus;
@@ -883,7 +957,7 @@ class LegacyEngine {
       if (reading && abus == 0xFFFF) {
         ++idling;
         if (idling == 3) {
-          PUSH_BG(FIFO_IDLING | history_i);
+          PUSH(FIFO_IDLING | history_i);
           history_i = 0;
         }
       } else {
@@ -910,13 +984,17 @@ class LegacyEngine {
 };  // end LegacyEngine
 
 class Engine0 :
+#if 0
+    public SmallRam<Engine0>,
+#else
     public BigRam<Engine0>,
+#endif
     public DoCoco64k<Engine0>,
     public LegacyEngine<Engine0> {
  public:
   static void Run() {
-    // T::InitCoco3Mmu();
     InitCoco64k();
+    RamInit();
     RunLegacy();
   }
 };
