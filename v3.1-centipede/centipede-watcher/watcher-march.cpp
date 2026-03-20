@@ -685,8 +685,8 @@ class LegacyEngine {
 
         case FIFO_FLOPPY_COMMAND >> 24:
           printf(" f!%02x ", (x & 0xFF));
-          switch (x & 0xFF) {
-            case 0x17:  // seek track
+          switch (x & 0xF0) {  // was 0xFF
+            case 0x10:  // seek track // was 0x17
               floppy_track = floppy_buf[0];
               break;
 
@@ -719,6 +719,10 @@ class LegacyEngine {
 
               floppy_ptr = floppy_buf;
 
+              break;
+
+            default:
+              printf(" ?%02x? ", (x & 0xFF));
               break;
           }
           break;
