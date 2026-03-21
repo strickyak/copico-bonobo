@@ -4,8 +4,14 @@
  * But does not use any PIO yet.
  */
 
+#define CENTIPEDE_CROSS_CORE_FIFO 1
+
+#define CENTIPEDE_VERBOSE_SWI2 1
+
+#define CENTIPEDE_GRAB_ALL_WRITES 1
+#define CENTIPEDE_GRAB_ALL   1
 #define CENTIPEDE_GRAB_ADDR  0xA342
-#define CENTIPEDE_GRAB_BYTES 100
+#define CENTIPEDE_GRAB_BYTES 1000
 
 #define CENTIPEDE_STEPPING 0
 // #define CENTIPEDE_FIFO_TRIGGER_R  0xA1CD
@@ -83,6 +89,20 @@ extern int stdio_usb_in_chars(char* buf, int length);
 
 using byte = unsigned char;
 
+#if CENTIPEDE_CROSS_CORE_FIFO
+#include "cross-core.h"
+CrossCoreFIFO<uint,256> ccfifo;
+
+uint ccfifo_pop(void) {
+    bool ok = false;
+    uint z = 0;
+    do {
+        ok = ccfifo.pop(z);
+    } while (!ok);
+    return z;
+}
+#endif
+
 #define INCLUDING
 #include "disk11_rom.c"  // byte disk11_rom[8192]...
 // #include "hdbdw3cc3_rom.c"
@@ -103,6 +123,7 @@ void DefaultWriter(uint addr, byte d) { gpio_set_dir_out_masked(0); }
 
 ////////////////////////////////////////////////////////
 
+#if 0
 template <uint G>
 class PositiveControl {
   static void Init(bool value) {
@@ -148,21 +169,9 @@ NegativeSignal<G_RW> Write;
 NegativeSignal<G_E> E;
 NegativeSignal<G_Q> Q;
 NegativeSignal<G_SND> Snd;
-
-////////////////////////////////////////////////////////
+#endif
 
 byte ram[128 * 1024];
-
-#if 0
-template <class T>
-class DoCoverRam32K {
-  FORCE_INLINE static bool Predicate(uint a) { return a < 0x8000; }
-  FORCE_INLINE static void Write(uint a, byte d) {
-    // ram[a] = d // should already be done.
-  }
-  FORCE_INLINE static byte Read(uint a) { return ram[a]; }
-};
-#endif
 
 ////////////////////////////////////////////////////////
 
@@ -199,6 +208,9 @@ class DoCoverRam32K {
 #define FIFO_TRIGGER_R (0x09u << 24)
 #define FIFO_IDLING (0x0Au << 24)
 #define FIFO_GRABBED (0x0Bu << 24)
+#define FIFO_SWI2 (0x0Cu << 24)
+
+bool Prefix10;
 
 uint trigger;
 volatile uint idling;
@@ -228,7 +240,14 @@ FORCE_INLINE bool inline_volatile_gpio_get(uint pin) {
 #endif
 }
 
+#if CENTIPEDE_CROSS_CORE_FIFO
+#define PUSH ccfifo.push
+#define POP ccfifo_pop
+#else
 #define PUSH force_inline_multicore_fifo_push_blocking
+#define POP multicore_fifo_pop_blocking()
+#endif
+
 FORCE_INLINE void force_inline_multicore_fifo_push_blocking(uint32_t data) {
   // We wait for the fifo to have some space
   while (!multicore_fifo_wready()) tight_loop_contents();
@@ -473,8 +492,9 @@ uint history_i;
 #if CENTIPEDE_GRAB_ADDR
      // grab[0] is unused (to speed things up, by combining
      // the counter grab_i with the grabbing state variable).
-uint grab[CENTIPEDE_GRAB_BYTES];
-uint grab_i;
+uint grab[CENTIPEDE_GRAB_BYTES + 300];
+volatile uint grab_i;
+volatile uint grab_enabled;
 #endif
 
 template <class T>
@@ -532,7 +552,7 @@ class LegacyEngine {
   static void background() {
     while (1) {
       bg_busy = false;
-      uint x = multicore_fifo_pop_blocking();
+      uint x = POP();
       bg_busy = true;
 #if !CENTIPEDE_STEPPING
       HaltOn();
@@ -543,39 +563,44 @@ class LegacyEngine {
           putchar_raw(255 & x);
           break;
 
+        case FIFO_SWI2 >> 24:
+            putchar_raw(C_LOGGING);
+            putchar_raw(4 + 128);
+            putchar_raw('S');
+            putchar_raw('W');
+            putchar_raw('I');
+            putchar_raw('2');
+
+
 #if CENTIPEDE_GRAB_ADDR
         case FIFO_GRABBED >> 24:
           {
             putchar_raw(C_LOGGING);
-            putchar_raw(5 + 128);
+            putchar_raw(4 + 128);
             putchar_raw('G');
             putchar_raw('R');
             putchar_raw('A');
             putchar_raw('B');
-            putchar_raw('\n');
 
 
-            //printf("\ngrabbed %x [[[[[\n", CENTIPEDE_GRAB_ADDR);
             // grab[0] is unused (to speed things up).
-            for (uint i = 1; i < CENTIPEDE_GRAB_BYTES; i++) {
-                uint h = grab[i];
+            for (uint j = 1; j < grab_i; j++) {
+                uint h = grab[j];
                 if (h & (1u<<24)) {
                     // reading
                     putchar_raw(C_CYCLE_RD3);
                     putchar_raw(h >> 16);
                     putchar_raw(h >> 8);
                     putchar_raw(h);
-                    //printf("r %04x   -> %02x\n", (h>>8)&0xFFFF, h&0xFF);
                 } else {
                     // writing
                   putchar_raw(C_RAM2_WRITE);
                   putchar_raw(h >> 16);
                   putchar_raw(h >> 8);
                   putchar_raw(h);
-                  //printf("w %04x <-   %02x\n", (h>>8)&0xFFFF, h&0xFF);
                 }
             }
-            //printf("\ngrabbed ]]]]]\n");
+            grab_i = 0;
           }
         break;
 
@@ -721,6 +746,9 @@ class LegacyEngine {
 
               break;
 
+            case 0xD0:  // NOOP
+              break;
+
             default:
               printf(" ?%02x? ", (x & 0xFF));
               break;
@@ -778,10 +806,26 @@ class LegacyEngine {
               gpio_set_dir_out_masked(0xFF);
               gpio_put_masked(0xFF, dbus);
             } else {
+                // don't get involved.  don't gpio_set_dir(G_SLENB, GPIO_OUT).
+
+                // But read the data bus, in case it is useful.
+                STALL_WHILE(G_Q , not CENTIPEDE_INVERT_EQ, 'k');
+                dbus = (byte)sio_hw->gpio_in;  // late grab of data
             }
           } else if (T::UseCoco64kRam(abus)) {
             dbus = T::Peek(abus);
 
+#if CENTIPEDE_VERBOSE_SWI2
+            if (dbus == 0x10) {
+                Prefix10 = true;
+            } else if (Prefix10 && dbus == 0x3F) {
+                grab_i = 1;
+                grab_enabled = 1;
+                PUSH(FIFO_SWI2);
+            } else {
+                Prefix10 = false;
+            }
+#endif
             gpio_set_dir(G_SLENB, GPIO_OUT);
 
             gpio_set_dir_out_masked(0xFF);
@@ -837,9 +881,14 @@ class LegacyEngine {
           T::Poke(abus, dbus);
 #endif
 
+#if CENTIPEDE_GRAB_ALL_WRITES
+          PUSH(FIFO_WRITE | (abus << 8) | dbus);
+#endif
           IOWriter w = 0;
           if (abus >= 0xFF00) {
+#if ! CENTIPEDE_GRAB_ALL_WRITES
             PUSH(FIFO_WRITE | (abus << 8) | dbus);
+#endif
             w = Writers[abus & 0x00FF];
             if (w) w(abus, dbus);
           }
@@ -914,6 +963,8 @@ class LegacyEngine {
                   floppy_track = floppy_buf[0];  // was losing critical race
 
                 PUSH(FIFO_FLOPPY_COMMAND | dbus);
+                // grab_i = 1;
+                // grab_enabled = 1;
                 break;
               case 0x9:  // WriteTrack
                 floppy_track = dbus;
@@ -939,16 +990,23 @@ class LegacyEngine {
       }  // end if special
 
 #if CENTIPEDE_GRAB_ADDR
+      if (grab_enabled) {
      // grab[0] is unused (to speed things up, by combining
      // the counter grab_i with the grabbing state variable).
-    if (abus == CENTIPEDE_GRAB_ADDR) {
-        grab_i = 1;
-    }
-    if (grab_i) {
-        grab[grab_i++] = (reading ? (1u<<24) : 0) | (abus << 8) | dbus;
-        if (grab_i >= CENTIPEDE_GRAB_BYTES) {
-            grab_i = 0;
-            PUSH(FIFO_GRABBED);
+#if CENTIPEDE_GRAB_ALL
+        if (grab_i == 0) {
+            grab_i = 1;
+        }
+#else
+        if (abus == CENTIPEDE_GRAB_ADDR) {
+            grab_i = 1;
+        }
+#endif
+        if (grab_i && (abus != 0xFFFF)) {
+            grab[grab_i++] = (reading ? (1u<<24) : 0) | (abus << 8) | dbus;
+            if (grab_i == CENTIPEDE_GRAB_BYTES) {
+                PUSH(FIFO_GRABBED);
+            }
         }
     }
 #endif
