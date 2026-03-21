@@ -7,6 +7,7 @@
 #define CENTIPEDE_CROSS_CORE_FIFO 1
 
 #define CENTIPEDE_VERBOSE_SWI2 1
+#define CENTIPEDE_GRAB_ON_SWI2 1 // needs CENTIPEDE_VERBOSE_SWI2
 
 #define CENTIPEDE_GRAB_ALL_WRITES 1
 #define CENTIPEDE_GRAB_ALL   1
@@ -222,6 +223,7 @@ byte floppy_status;
 byte floppy_track;
 byte floppy_sector;
 byte* floppy_ptr;
+bool floppy_data_last_written;
 
 byte floppy_buf[256];
 #define floppy_limit (256 + floppy_buf)
@@ -494,7 +496,7 @@ uint history_i;
      // the counter grab_i with the grabbing state variable).
 uint grab[CENTIPEDE_GRAB_BYTES + 300];
 volatile uint grab_i;
-volatile uint grab_enabled;
+uint grab_enabled;
 #endif
 
 template <class T>
@@ -570,7 +572,7 @@ class LegacyEngine {
             putchar_raw('W');
             putchar_raw('I');
             putchar_raw('2');
-
+          break;
 
 #if CENTIPEDE_GRAB_ADDR
         case FIFO_GRABBED >> 24:
@@ -600,7 +602,11 @@ class LegacyEngine {
                   putchar_raw(h);
                 }
             }
+#if CENTIPEDE_GRAB_ALL
+            grab_i = 1;
+#else
             grab_i = 0;
+#endif
           }
         break;
 
@@ -819,9 +825,13 @@ class LegacyEngine {
             if (dbus == 0x10) {
                 Prefix10 = true;
             } else if (Prefix10 && dbus == 0x3F) {
-                grab_i = 1;
-                grab_enabled = 1;
+#if CENTIPEDE_GRAB_ON_SWI2
+                if (!grab_i) {
+                    grab_i = 1;
+                    grab_enabled = 1;
+                }
                 PUSH(FIFO_SWI2);
+#endif
             } else {
                 Prefix10 = false;
             }
@@ -921,7 +931,13 @@ class LegacyEngine {
                 floppy_status &= 1;  // Clear all except BUSY.
                 break;
               case 0xB:  // ReadData
+                if (floppy_data_last_written) {
+                    // NitrOS9 rb1773 probes for hardware by reading/changing/checking the Data value.
+                    floppy_ptr = floppy_buf;
+                }
                 dbus = *floppy_ptr++;
+                floppy_data_last_written = false;
+
                 if ((floppy_latch & 0x80) != 0 && floppy_ptr >= floppy_limit) {
                   floppy_ptr = floppy_buf;
                   PUSH(FIFO_NMI);
@@ -973,7 +989,13 @@ class LegacyEngine {
                 floppy_sector = dbus;
                 break;
               case 0xB:  // WriteData
+                if (!floppy_data_last_written) {
+                    // NitrOS9 rb1773 probes for hardware by reading/changing/checking the Data value.
+                    floppy_ptr = floppy_buf;
+                }
                 *floppy_ptr++ = dbus;
+                floppy_data_last_written = true;
+
                 if ((floppy_latch & 0x80) != 0 && floppy_ptr >= floppy_limit) {
                   PUSH(FIFO_W_256);
                   PUSH(FIFO_NMI);
