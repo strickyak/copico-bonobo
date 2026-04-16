@@ -1,11 +1,48 @@
-#define MHz 250
+/*
+ * watcher-march will work on double-speed coco3
+ * if we are at 250 or 270 MHz (but not 150 or 300).
+ * But does not use any PIO yet.
+ *
+ * CHANGE LOG
+ *
+ * experiment: WAIT6=0.  Works without the wait
+ * (including 1.5speed coco3) (but 2speed coco3 is
+ * currently broken by CENTIPEDE_BIG_FIFO)
+ *
+ * experiment: HACK42: Let PEEK(&H6EEE) returns 42.
+ * Does coco3/SLENB read our 42?  Doesn't read 42.
+ * but coco2 does, of course (and only reports 18K ?MEM).
+ *
+ * CENTIPEDE_BIG_FIFO: cross-core fifo
+ * with C++ circular buffer class.
+ * Works except coco3(double).
+ * Does Work coco3(1.5speed,basic).
+ *
+ * Tue Mar 10 14:52:40 PDT 2026
+ * watcher-march.cpp-39-finally-fixed:
+ * does three things (ROM, RAM32, RSDOS/Floppy0)
+ * on coco2/16K and coco3(doublespeed).
+ *
+ */
 
-#define CENTIPEDE_REV 3204 // 32d
-//#define CENTIPEDE_REV 3205 // 32e
+#define MHz 150
 
-#define DBUS_HOLD_CYCLES 0
+// #define CENTIPEDE_REV 3204 // 32d
+#define CENTIPEDE_REV 3205 // 32e
 
+//#define CENTIPEDE_GRAB_ADDR  0xA342
+//#define CENTIPEDE_GRAB_BYTES 100
+
+#define WAIT6 0  // works without the wait.
+#define HACK42 0
+#define CENTIPEDE_BIG_FIFO 0
+#define CENTIPEDE_STEPPING 0
+// #define CENTIPEDE_FIFO_TRIGGER_R  0xA1CD
+// #define CENTIPEDE_FIFO_TRIGGER2_R  0x2602
+// #define CENTIPEDE_FIFO_WATCH_R 0xA1CB
+#define CENTIPEDE_24D_EQ 1
 #define CENTIPEDE_INVERT_EQ 1
+#define CENTIPEDE_FAST_EQ 1
 
 #define LIKELY(x) __builtin_expect(!!(x), 1)
 #define UNLIKELY(x) __builtin_expect(!!(x), 0)
@@ -213,20 +250,17 @@ class DoCoverRam32K {
 #define C_CYCLE_RD3 211
 
 // Commands into the FIFO to the slow core
-#if 0
 #define FIFO_READ (0x01u << 24)
 #define FIFO_ROM (0x02u << 24)
 #define FIFO_WRITE (0x03u << 24)
-#define FIFO_WATCH_R (0x08u << 24)
-#define FIFO_TRIGGER_R (0x09u << 24)
-#define FIFO_IDLING (0x0Au << 24)
-#define FIFO_GRABBED (0x0Bu << 24)
-#endif
-
 #define FIFO_NMI (0x04u << 24)
 #define FIFO_FLOPPY_COMMAND (0x05u << 24)
 #define FIFO_W_256 (0x06u << 24)  // finished 256 bytes of written data
 #define FIFO_FLOPPY_LATCH (0x07u << 24)
+#define FIFO_WATCH_R (0x08u << 24)
+#define FIFO_TRIGGER_R (0x09u << 24)
+#define FIFO_IDLING (0x0Au << 24)
+#define FIFO_GRABBED (0x0Bu << 24)
 
 uint trigger;
 volatile uint idling;
@@ -280,10 +314,8 @@ void OUTPUT(int i, int x) {
 void HaltOn() {
   gpio_set_dir(G_HALT, GPIO_OUT);
   // gpio_put(G_HALT, false);
-  SET_LED(1);
 }
 void HaltOff() {
-  SET_LED(0);
   // sleep_us(100);
   // gpio_put(G_HALT, true);
   gpio_set_dir(G_HALT, GPIO_IN);
@@ -541,7 +573,48 @@ byte keyboard_response(char c) {
 
 #endif
 
+void InitAutoType() {
+#ifdef AUTO_TYPE
+    Readers[0x00] = [&](uint a) {
+        if (auto_skip) {
+            --auto_skip;
+            PUSH('~');
+            return (byte)0xFF;
+        }
+        if (auto_hold) {
+            --auto_hold;
+            if (!auto_hold) auto_skip = 100;
+            PUSH(':');
+            return keyboard_response(auto_value);
+        }
+        char c = auto_type[auto_i++];
+        if (!c) {
+            PUSH('0');
+            // EOS
+            Readers[0xFF & 0xFF00] = nullptr;
+            return (byte)0xFF;
+        }
+        PUSH(c);
+        auto_value = c;
+        auto_hold = 100;
+        return (byte)0xFF;
+    };
+#endif
+}
+
 ////////////////////////////////////////////////////////
+
+#if CENTIPEDE_STEPPING
+uint history[300];
+uint history_i;
+#endif
+
+#if CENTIPEDE_GRAB_ADDR
+     // grab[0] is unused (to speed things up, by combining
+     // the counter grab_i with the grabbing state variable).
+uint grab[CENTIPEDE_GRAB_BYTES];
+uint grab_i;
+#endif
 
 template <class T>
 class LegacyEngine {
@@ -567,6 +640,7 @@ class LegacyEngine {
 #if G_SCS
     INPUT(G_SCS);
 #endif
+
 
     // OUTPUT(G_SLENB, 0);
     gpio_init(G_SLENB);
@@ -610,14 +684,98 @@ class LegacyEngine {
       bg_busy = false;
       uint x = POP();
       bg_busy = true;
+#if !CENTIPEDE_STEPPING
       HaltOn();
-
+      // printf("=%x ", (x>>24));
+#endif
       switch (x >> 24) {
         case 0:
           putchar_raw(255 & x);
           break;
 
+#if CENTIPEDE_GRAB_ADDR
+        case FIFO_GRABBED >> 24:
+          {
+            putchar_raw(C_LOGGING);
+            putchar_raw(5 + 128);
+            putchar_raw('G');
+            putchar_raw('R');
+            putchar_raw('A');
+            putchar_raw('B');
+            putchar_raw('\n');
+
+
+            //printf("\ngrabbed %x [[[[[\n", CENTIPEDE_GRAB_ADDR);
+            // grab[0] is unused (to speed things up).
+            for (uint i = 1; i < CENTIPEDE_GRAB_BYTES; i++) {
+                uint h = grab[i];
+                if (h & (1u<<24)) {
+                    // reading
+                    putchar_raw(C_CYCLE_RD3);
+                    putchar_raw(h >> 16);
+                    putchar_raw(h >> 8);
+                    putchar_raw(h);
+                    //printf("r %04x   -> %02x\n", (h>>8)&0xFFFF, h&0xFF);
+                } else {
+                    // writing
+                  putchar_raw(C_RAM2_WRITE);
+                  putchar_raw(h >> 16);
+                  putchar_raw(h >> 8);
+                  putchar_raw(h);
+                  //printf("w %04x <-   %02x\n", (h>>8)&0xFFFF, h&0xFF);
+                }
+            }
+            //printf("\ngrabbed ]]]]]\n");
+          }
+        break;
+
+#endif
+
+#if CENTIPEDE_STEPPING
+        case FIFO_IDLING >> 24:  // watchpoint read
 #if 0
+                            putchar_raw(139);
+                            putchar_raw(128+1);  // payload size is 1
+                            putchar_raw('@' + (255&x));  // payload
+#endif
+
+          for (uint i = 0; i < (255 & x); i++) {
+            uint h = history[i];
+#if 0
+                            putchar_raw(139);
+                            putchar_raw(128+2);  // size is 2
+                            putchar_raw('0' + (255&x));  // payload
+                            putchar_raw('0' + i);  // payload
+#endif
+            if (h & (1 << 24)) {
+#if 1
+              if (((h >> 8) & 0xFFFF) != 0xFFFF) {
+                // Reading
+                putchar_raw(C_CYCLE_RD3);
+                putchar_raw(h >> 16);
+                putchar_raw(h >> 8);
+                putchar_raw(h);
+              }
+#endif
+            } else {
+              // Writing
+              putchar_raw(C_RAM2_WRITE);
+              putchar_raw(h >> 16);
+              putchar_raw(h >> 8);
+              putchar_raw(h);
+            }
+          }
+#if 0
+                        // printf(" I ");
+#if CENTIPEDE_STEPPING
+                        HaltOff();
+                        sleep_us(2);
+                        HaltOn();
+#endif
+#endif
+#endif
+          break;
+
         case FIFO_TRIGGER_R >> 24:  // watchpoint read
           printf(" T%x ", (x >> 8) & 0xFFFF);
           break;
@@ -651,7 +809,6 @@ class LegacyEngine {
           putchar_raw(x >> 8);
           putchar_raw(x);
           break;
-#endif
 
         case FIFO_NMI >> 24:
           gpio_set_dir(G_NMI, GPIO_OUT);
@@ -724,10 +881,10 @@ class LegacyEngine {
         default:
           printf("\nWUT? FIFO %x\n", x);
       }
-
-
+        // sleep_us(5);
+#if !CENTIPEDE_STEPPING
       HaltOff();
-
+#endif
     }
   }
 
@@ -747,16 +904,15 @@ class LegacyEngine {
     while (true) {
       STALL_WHILE(G_E, CENTIPEDE_INVERT_EQ, 'v');
 
-      const uint signals = volatile_sio_hw->gpio_in;
-      const bool reading = ((signals & (1u << G_RW)) != 0);
-      const uint abus = volatile_sio_hw->gpio_hi_in & 0xFFFF;
+      volatile uint signals = volatile_sio_hw->gpio_in;
+      bool reading = ((signals & (1u << G_RW)) != 0);
+      const uint abus = sio_hw->gpio_hi_in & 0xFFFF;
       byte dbus = 0x00;
 
       constexpr uint NEG_CTS = (1 << G_CTS);
       constexpr uint NEG_SCS = (1 << G_SCS);
       constexpr uint NEG_SELECTS = NEG_CTS | NEG_SCS;
 
-      // YAK
       if (LIKELY((signals & NEG_SELECTS) ==
                  NEG_SELECTS)) {  // Not Special Select
 
@@ -778,28 +934,50 @@ class LegacyEngine {
             gpio_put_masked(0xFF, dbus);
           } else if (T::UseCoco64kRam(abus)) {
             dbus = T::Peek(abus);
+#if HACK42
+            if (abus == 0x6EEE) dbus = 42;
+#endif
 
             gpio_set_dir(G_SLENB, GPIO_OUT);
-            busy_wait_at_least_cycles(12);  // YAK
 
             gpio_set_dir_out_masked(0xFF);
             gpio_put_masked(0xFF, dbus);
 
           } else {
             // don't get involved.  don't gpio_set_dir(G_SLENB, GPIO_OUT).
-#if 0
+#if 1
                         // But read the data bus, in case it is useful.
                         STALL_WHILE(G_Q , not CENTIPEDE_INVERT_EQ, 'k');
                         dbus = (byte)sio_hw->gpio_in;  // late grab of data
 #endif
           }
 
+#if CENTIPEDE_FIFO_WATCH_R
+          if (abus == CENTIPEDE_FIFO_WATCH_R) {
+            PUSH(FIFO_WATCH_R | abus);
+          }
+#endif
+
           STALL_WHILE(G_E, not CENTIPEDE_INVERT_EQ, 'r');
-#if DBUS_HOLD_CYCLES
-          busy_wait_at_least_cycles(DBUS_HOLD_CYCLES);
+#if WAIT6
+          busy_wait_at_least_cycles(6);
 #endif
           gpio_set_dir_in_masked(0xFF);
           gpio_set_dir(G_SLENB, GPIO_IN);
+
+#if CENTIPEDE_FIFO_TRIGGER_R
+          if (trigger == 0 && abus == CENTIPEDE_FIFO_TRIGGER_R) {
+            PUSH(FIFO_TRIGGER_R | abus);
+            trigger = 1;
+          } else if (trigger == 1 && abus == CENTIPEDE_FIFO_TRIGGER2_R) {
+            PUSH(FIFO_TRIGGER_R | abus);
+            trigger = 2;
+          }
+
+          if (trigger == 2) {
+            PUSH(FIFO_READ | (abus << 8) | dbus);
+          }
+#endif
 
           // END NORMAL READING
         } else {
@@ -822,6 +1000,12 @@ class LegacyEngine {
 
           STALL_WHILE(G_E, not CENTIPEDE_INVERT_EQ, 'q');
 
+#if CENTIPEDE_FIFO_TRIGGER_R
+          if (trigger == 2) {
+            PUSH(FIFO_WRITE | (abus << 8) | dbus);
+          }
+#endif
+
           // END NORMAL WRITING
         }  // end if (writing) else
 
@@ -830,9 +1014,11 @@ class LegacyEngine {
           dbus;
 
           if (LIKELY((signals & NEG_CTS) == 0)) {  // READ CTS
+            // SAY('F');
             dbus = disk11_rom[abus & 0x1FFF];
 
           } else {  // READ SCS
+                    // SAY('R');
             dbus = ram[abus];
             switch (abus & 15) {
               case 0x8:  // ReadStatus
@@ -854,8 +1040,8 @@ class LegacyEngine {
           gpio_set_dir_out_masked(0xFF);
           gpio_put_masked(0xFF, dbus);
           STALL_WHILE(G_E, not CENTIPEDE_INVERT_EQ, 's');
-#if DBUS_HOLD_CYCLES
-          busy_wait_at_least_cycles(DBUS_HOLD_CYCLES);
+#if WAIT6
+          busy_wait_at_least_cycles(6);
 #endif
           gpio_set_dir_in_masked(0xFF);
         } else {  // Special CPU WRITING -- we RX
@@ -905,6 +1091,44 @@ class LegacyEngine {
 
         }  // end read or write
       }  // end if special
+
+#if CENTIPEDE_GRAB_ADDR
+     // grab[0] is unused (to speed things up, by combining
+     // the counter grab_i with the grabbing state variable).
+    if (abus == CENTIPEDE_GRAB_ADDR) {
+        grab_i = 1;
+    }
+    if (grab_i) {
+        grab[grab_i++] = (reading ? (1u<<24) : 0) | (abus << 8) | dbus;
+        if (grab_i >= CENTIPEDE_GRAB_BYTES) {
+            grab_i = 0;
+            PUSH(FIFO_GRABBED);
+        }
+    }
+#endif
+
+#if CENTIPEDE_STEPPING
+      if (history_i < sizeof history) {
+        history[history_i++] = (uint(reading) << 24) | (abus << 8) | dbus;
+      }
+      // NORMAL CPU READING -- we TX
+      if (reading && abus == 0xFFFF) {
+        ++idling;
+        if (idling == 3) {
+          PUSH(FIFO_IDLING | history_i);
+          history_i = 0;
+        }
+      } else {
+        idling = 0;
+      }
+
+      if (idling < 5 || bg_busy) {
+        HaltOn();
+      } else {
+        HaltOff();
+      }
+#endif
+
     }  // end while true
   }  // end foreground()
 
@@ -912,9 +1136,9 @@ class LegacyEngine {
     // foreground must be fast.
     multicore_launch_core1(foreground);
 
-    // background on core 0 handles interrupts.
-    background();
+    background();  // background on core 0 handles interrupts.
   }
+
 };  // end LegacyEngine
 
 class Engine0 :
@@ -937,15 +1161,16 @@ int main() {
 #endif
   stdio_usb_init();
 
-  for (uint i = 0; i < 8; i++) {
+  for (uint i = 0; i < 5; i++) {
     SET_LED(1);
-    sleep_ms(200);
-    //Engine0::InitializePins();
+    sleep_ms(500);
+    Engine0::InitializePins();
 
     SET_LED(0);
-    sleep_ms(200);
-    //Engine0::InitializePins();
+    sleep_ms(500);
+    Engine0::InitializePins();
   }
 
+  InitAutoType();
   Engine0::Run();
 }

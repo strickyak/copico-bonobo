@@ -1,7 +1,7 @@
-#define MHz 250
+#define MHz 160
 
-#define CENTIPEDE_REV 3204 // 32d
-//#define CENTIPEDE_REV 3205 // 32e
+// #define CENTIPEDE_REV 3204 // 32d
+#define CENTIPEDE_REV 3205 // 32e
 
 #define DBUS_HOLD_CYCLES 0
 
@@ -280,10 +280,8 @@ void OUTPUT(int i, int x) {
 void HaltOn() {
   gpio_set_dir(G_HALT, GPIO_OUT);
   // gpio_put(G_HALT, false);
-  SET_LED(1);
 }
 void HaltOff() {
-  SET_LED(0);
   // sleep_us(100);
   // gpio_put(G_HALT, true);
   gpio_set_dir(G_HALT, GPIO_IN);
@@ -756,7 +754,6 @@ class LegacyEngine {
       constexpr uint NEG_SCS = (1 << G_SCS);
       constexpr uint NEG_SELECTS = NEG_CTS | NEG_SCS;
 
-      // YAK
       if (LIKELY((signals & NEG_SELECTS) ==
                  NEG_SELECTS)) {  // Not Special Select
 
@@ -780,7 +777,6 @@ class LegacyEngine {
             dbus = T::Peek(abus);
 
             gpio_set_dir(G_SLENB, GPIO_OUT);
-            busy_wait_at_least_cycles(12);  // YAK
 
             gpio_set_dir_out_masked(0xFF);
             gpio_put_masked(0xFF, dbus);
@@ -937,13 +933,13 @@ int main() {
 #endif
   stdio_usb_init();
 
-  for (uint i = 0; i < 8; i++) {
+  for (uint i = 0; i < 2; i++) {
     SET_LED(1);
-    sleep_ms(200);
+    sleep_ms(500);
     //Engine0::InitializePins();
 
     SET_LED(0);
-    sleep_ms(200);
+    sleep_ms(500);
     //Engine0::InitializePins();
   }
 
