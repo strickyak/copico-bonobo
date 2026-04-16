@@ -1,0 +1,61 @@
+
+[ /c/tfr9/v3 ]
+
+ 2051  - os9 format /tmp/friday
+ 2052  - os9 gen -b/c/nitros9/level1/coco1/bootfiles/bootfile_covdg -t=/c/nitros9/level1/coco1/bootfiles/kernel_1773   /tmp/friday
+
+ 2054  go run ./tconsole  --disks=f0:/tmp/friday      -abslists ../../toolshed/cocoroms/bas13.rom.list,/home/strick/modoc/coco-shelf/toolshed/cocoroms/extbas11.rom.list -no_modules --usb_verbose=0 --centipede       /tmp/coco2.0x8000.rom coco2-vectors-6309.0xfff0.rom     2>_log 
+
+
+-------------------------------------------------------------------------------------------------------------------
+
+strick@nand:/c/nitros9/level1/coco1/cmds$ - os9 makdir /tmp/friday2,CMDS
+strick@nand:/c/nitros9/level1/coco1/cmds$ - os9 copy -r shell_21  /tmp/friday2,CMDS/shell
+
+strick@nand:/c/nitros9/level1/coco1/cmds$ - os9 attr -r -e -pe  /tmp/friday2,CMDS/shell
+--e-rewr
+
+strick@nand:/c/nitros9/level1/coco1/cmds$ for x in echo sleep date dir mdir free mfree ; do - os9 copy -r  $x /tmp/friday2,CMDS/$x ; - os9 attr -r -e -pe /tmp/friday2,CMDS/$x ; done
+--e-rewr
+
+--e-rewr
+
+--e-rewr
+
+--e-rewr
+
+--e-rewr
+
+--e-rewr
+
+--e-rewr
+
+strick@nand:/c/nitros9/level1/coco1/cmds$ - os9 dir /tmp/friday2,CMDS
+
+                           Directory of /tmp/friday2,CMDS
+shell           echo            sleep           date            dir
+mdir            free            mfree
+strick@nand:/c/nitros9/level1/coco1/cmds$ - os9 dir -e  /tmp/friday2,CMDS
+
+                           Directory of /tmp/friday2,CMDS
+ Owner    Last modified    Attributes Sector Bytecount Name
+-------   ---------------  ---------- ------ --------- ----
+  0.0     2026/03/15 0006   --e-rewr      4D      1575 shell
+  0.0     2026/03/15 0006   --e-rewr      55        34 echo
+  0.0     2026/03/15 0006   --e-rewr      57        77 sleep
+  0.0     2026/03/15 0006   --e-rewr      59       241 date
+  0.0     2026/03/15 0006   --e-rewr      5B       927 dir
+  0.0     2026/03/15 0006   --e-rewr      60       568 mdir
+  0.0     2026/03/15 0006   --e-rewr      64       657 free
+  0.0     2026/03/15 0006   --e-rewr      68       374 mfree
+strick@nand:/c/nitros9/level1/coco1/cmds$
+
+===================================================================================================================
+
+strick@nand:/c/tfr9/v3$ go run ./tconsole  --disks=d0:/tmp/saturday --level=1  --usb_verbose=0 --centipede   -borges ~/borges/   2>_log
+Internal web server started at ":8080"
+wlmnoyN _00  f!d0  _39  f!17  f!80  34r1  _b9  _39  f!80  34r2  _b9  _39  f!80  34r3  _b9  _39  f!80  34r4  _b9  _39  f!80  34r5  _b9  _39  f!80  34r6  _b9  _39  f!80  34r7  _b9  _39  f!80  34r8  _b9  _39  f!80  34r9  _b9  _39  f!80  34r10  _b9  _39  f!80  34r11  _b9  _39  f!80  34r12  _b9  _39  f!80  34r13  _b9  _39  f!80  34r14  _b9  _39  f!80  34r15  _b9  _39  f!80  34r16  _b9  _39  f!80  34r17  _b9  _39  f!80  34r18  _b9 z f!d0  _09  _00  _09  f!10  f!80  0r1  _39  _b9  f!80  0r13  _39  _b9  f!80  0r14  _39  _b9  f!80  0r15  _39  _b9  f!80  0r16  _39  _b9  f!80  0r17  _39  _b9  f!80  0r18  _39  _b9  f!80  0r1  _79  _f9  f!80  0r2  _79  _f9  f!80  0r3  _79  _f9  f!80  0r4  _79  _f9  f!80  0r5  _79  _f9  f!80  0r6  _79  _f9  f!80  0r7  _79  _f9  f!80  0r8  _79  _f9  f!80  0r9  _79  _f9  f!80  0r10  _79  _f9  f!80  0r11  _79  _f9  f!80  0r12  _79  _f9  f!80  0r13  _79  _f9  f!80  0r14  _79  _f9  f!80  0r15  _79  _f9  f!80  0r16  _79  _f9  f!80  0r17  _79  _f9  f!80  0r18  _79  _f9  _09  f!10  f!80  1r1  _39  _b9  f!80  1r2  _39  _b9  f!80  1r3  _39  _b9  f!80  1r4  _39  _b9  f!80  1r5  _39  _b9  f!80  1r6  _39  _b9  f!80  1r7  _39  _b9  f!80  1r8  _39  _b9  f!80  1r9  _39  _b9  f!80  1r10  _39  _b9  f!80  1r11  _39  _b9  f!80  1r12  _39  _b9  f!80  1r13  _39  _b9  f!80  1r14  _39  _b9  f!80  1r15  _39  _b9  f!80  1r16  _39  _b9  f!80  1r17  _39  _b9  f!80  1r18  _39  _b9  f!80  1r1  _79  _f9  f!80  1r2  _79  _f9  f!80  1r3  _79  _f9  f!80  1r4  _79  _f9  f!80  1r5  _79  _f9  f!80  1r6  _79  _f9  f!80  1r7  _79  _f9  f!80  1r8  _79  _f9  f!80  1r9  _79  _f9  f!80  1r10  _79  _f9  f!80  1r11  _79  _f9  f!80  1r12  _79  _f9  f!80  1r13  _79  _f9  f!80  1r14  _79  _f9  _00 ***
+*** CAUGHT ERROR: INFINITE LOOP
+***
+*** SHUTDOWN
+

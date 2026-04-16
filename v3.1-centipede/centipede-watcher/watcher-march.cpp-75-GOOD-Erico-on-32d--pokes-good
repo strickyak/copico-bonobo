@@ -216,12 +216,12 @@ class DoCoverRam32K {
 #if 0
 #define FIFO_READ (0x01u << 24)
 #define FIFO_ROM (0x02u << 24)
-#define FIFO_WRITE (0x03u << 24)
 #define FIFO_WATCH_R (0x08u << 24)
 #define FIFO_TRIGGER_R (0x09u << 24)
 #define FIFO_IDLING (0x0Au << 24)
 #define FIFO_GRABBED (0x0Bu << 24)
 #endif
+#define FIFO_WRITE (0x03u << 24)
 
 #define FIFO_NMI (0x04u << 24)
 #define FIFO_FLOPPY_COMMAND (0x05u << 24)
@@ -642,7 +642,9 @@ class LegacyEngine {
           putchar_raw(x >> 8);
           putchar_raw(x);
           break;
+#endif
 
+#if FIFO_WRITE
         case FIFO_WRITE >> 24:  // write cycle
           // putchar('w');
           // printf("+%04Xw%02X ", (x>>8), 0xFF&x);
@@ -820,6 +822,9 @@ class LegacyEngine {
             if (w) w(abus, dbus);
           }
 
+#if FIFO_WRITE
+          PUSH(FIFO_WRITE | (abus<<8) | dbus);
+#endif
           STALL_WHILE(G_E, not CENTIPEDE_INVERT_EQ, 'q');
 
           // END NORMAL WRITING

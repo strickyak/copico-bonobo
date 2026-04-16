@@ -1,7 +1,7 @@
-#define MHz 250
+#define MHz 180 // 150
 
-#define CENTIPEDE_REV 3204 // 32d
-//#define CENTIPEDE_REV 3205 // 32e
+// #define CENTIPEDE_REV 3204 // 32d
+#define CENTIPEDE_REV 3205 // 32e
 
 #define DBUS_HOLD_CYCLES 0
 
@@ -756,7 +756,6 @@ class LegacyEngine {
       constexpr uint NEG_SCS = (1 << G_SCS);
       constexpr uint NEG_SELECTS = NEG_CTS | NEG_SCS;
 
-      // YAK
       if (LIKELY((signals & NEG_SELECTS) ==
                  NEG_SELECTS)) {  // Not Special Select
 
