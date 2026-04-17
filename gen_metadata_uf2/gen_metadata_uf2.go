@@ -1,3 +1,4 @@
+// Sample label: "p=1,b=centipede,v=32z,mhz=250,seed=4c6b0747-2641-41ce-9b1a-0ea6251199d0,h=pizga.net,name=Sparkat,id=z50"
 package main
 
 // code by Google Gemini 3
@@ -16,13 +17,15 @@ const (
 	UF2_MAGIC_END    = 0x0AB16F30
 
 	// RP2350 ARM Family ID
-	RP2350_ARM_FAMILY_ID = 0xe48bff56
+	// RP2350_ARM_FAMILY_ID = 0xe48bff56 // RP2350 ARM (Non-Secure)
+	RP2350_ARM_FAMILY_ID = 0xe48bff59 // RP2350 ARM (Secure)
 
 	// UF2 Flags: 0x00002000 means FamilyID is present
 	UF2_FLAG_FAMILY_ID_PRESENT = 0x00002000
 
 	// Target address for the last page of a 16MB Flash
-	TARGET_ADDR = 0x10FFFF00
+	// TARGET_ADDR = 0x10FFFF00
+	TARGET_ADDR = 0x10FFF000
 
 	BLOCK_SIZE   = 512
 	PAYLOAD_SIZE = 256
