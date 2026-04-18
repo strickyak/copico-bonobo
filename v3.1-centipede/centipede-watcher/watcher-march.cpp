@@ -1,5 +1,6 @@
 #define MHz 150
 #define VDG_ONLY 1
+#define TINY_DISPLAY 1
 
 //#define CENTIPEDE_REV 3226 // 32z
 // #define CENTIPEDE_REV 3204 // 32d
@@ -828,6 +829,8 @@ class LegacyEngine {
           // NORMAL CPU WRITING -- we RX
           STALL_WHILE(G_Q, not CENTIPEDE_INVERT_EQ, 'p');
           dbus = (byte)sio_hw->gpio_in;  // late grab of data
+
+
 #if !VDG_ONLY
           if (T::HasBigRam()) {
             T::Poke(abus, dbus);
@@ -1051,6 +1054,10 @@ const char* GetLabel(const char* key) {
     return nullptr;
 }
 
+#if TINY_DISPLAY
+#include "ssd1306.h"
+#endif
+
 int main() {
   Engine0::InitializePins();
   InitLabel();
@@ -1070,6 +1077,18 @@ int main() {
 #if VDG_ONLY
   printf("*** Running as VDG_ONLY ***\n");
 #endif // VDG_ONLY
+
+#if TINY_DISPLAY
+
+  DoSsd1306::Ssd1306_Init(0xFF30);
+  DoSsd1306::Ssd1306_HardwareInit();
+  display->clear();
+  drawChar(display, font_8x8, '$', 10, 10);
+  drawChar(display, font_8x8, '*', 20, 20);
+  drawChar(display, font_8x8, '#', 30, 30);
+  display->sendBuffer();
+  
+#endif
 
   Engine0::Run();
 }

@@ -18,12 +18,16 @@ target_sources(${PROJECT} PRIVATE
     watcher-march.cpp
     disk11_rom.c
     cross-core.h
+    ssd1306.h
 )
+add_subdirectory(pico-ssd1306)
 target_link_libraries(${PROJECT} PRIVATE
     hardware_pio
     pico_stdlib
     pico_multicore
     cmsis_core
+
+    pico_ssd1306 hardware_i2c
 )
 # pico_rand hardware_pio hardware_i2c
 
